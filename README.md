@@ -4,15 +4,15 @@ Proyecto de **Redes y Tecnología** — Iara Churba, Yazmin Kussi, Rocío Prieto
 
 > Sentite un cantante profesional, viví tu era popstar.
 
-Instalación de karaoke: la persona se ve a sí misma en un escenario pop 3D y
-**controla todo desde la cámara** — gestos con la mano (MediaPipe) y comandos de
-voz. No hay control por celular. Un servidor Node + Socket.IO mantiene la máquina
-de estados (y más adelante recibe el sensor ultrasónico del Arduino).
+Instalación de karaoke con estética **editorial / poster** (fondo crema, tipografía
+negra bien grande, halftone, estrella magenta, grano de impresión — nada de luces
+ni glow). La persona se ve a sí misma y **controla todo desde la cámara**: gestos
+con la mano (MediaPipe) y comandos de voz. No hay control por celular.
 
 ## Arquitectura
 
 ```
-web/     -> frontend Astro + Vite + Three.js + MediaPipe + Web Speech API
+web/     -> frontend Astro + Vite (HTML + SVG + canvas 2D) + MediaPipe + Web Speech API
 server/  -> "el cerebro": Express + Socket.IO + maquina de estados + catalogo
 ```
 
@@ -22,19 +22,19 @@ desde el :3000.
 
 ```
                  gestos (MediaPipe Hands) + voz (Web Speech)
-[ camara de la pantalla ] ──acciones──► [ server :3000 ] ──estado──► [ pantalla (Three.js) ]
+[ camara de la pantalla ] ──acciones──► [ server :3000 ] ──estado──► [ pantalla ]
 [ sensor ultrasonico Arduino ] ──WS/Serial──►   (maquina de estados)
 ```
 
 ## Arranque
 
 ```bash
-npm install       # instala y baja los modelos de MediaPipe (postinstall)
+npm install       # baja tambien modelos de MediaPipe + fuentes (postinstall)
 npm run dev
 ```
 
-Abrí http://localhost:4321/ en la compu (Chrome/Edge para la voz). La primera
-vez pide permiso de **cámara** y **micrófono**.
+Abrí http://localhost:4321/ (Chrome o Edge para la voz). La primera vez pide
+permiso de **cámara** y **micrófono**.
 
 `npm start` = build + todo en el :3000 (lo que usarías en el evento).
 
@@ -42,8 +42,8 @@ vez pide permiso de **cámara** y **micrófono**.
 
 `ESPERANDO → SELECCIONANDO → CONFIRMADA → COUNTDOWN → PLAYING → RESULTADO → ESPERANDO`
 
-La autoridad es el servidor ([server/stateMachine.js](server/stateMachine.js)).
-La pantalla solo manda **acciones** y renderiza el `estado`.
+La autoridad es el servidor ([server/stateMachine.js](server/stateMachine.js)). La
+pantalla solo manda **acciones** y renderiza el `estado`.
 
 ## Control por cámara
 
@@ -60,12 +60,11 @@ nadie por 10 segundos** en un estado activo, vuelve solo a ESPERANDO.
 | mano visible (ESPERANDO) | `presencia` |
 | mano arriba / abajo (SELECCIONANDO) | `scroll` |
 | pellizco (pulgar + índice) sostenido ~1s | `confirmar` |
-| **gesto de corazón** (dos manos) | efecto: flash 💖 + pulso del escenario |
+| **gesto de corazón** (dos manos) | efecto: stamp ♥ + la estrella se pone hot pink |
 
-Además: **filtro de color** de toda la pantalla según cuántas manos hay
-(0 = nada, 1 = azul, 2 = verde, corazón = rosa) — adaptado del `pc.html` del
-equipo. Los 21 puntos de cada mano se dibujan como **esqueleto neón 3D**
-([web/src/three/manosNeon.js](web/src/three/manosNeon.js)) con el color ciclando.
+El esqueleto de la mano se dibuja como **tinta** (líneas negras + nodos magenta,
+sin glow) en un canvas 2D — [web/src/lib/manosCanvas.js](web/src/lib/manosCanvas.js).
+La cantidad de manos aplica un tinte de papel muy sutil.
 
 ### Voz — Web Speech API (es-ES, solo Chrome/Edge)
 
@@ -79,29 +78,22 @@ equipo. Los 21 puntos de cada mano se dibujan como **esqueleto neón 3D**
 | "confirmar" / "dale" / "esa" | `confirmar` |
 | "salir" / "cancelar" / "basta" | `reset` (o cortar la canción) |
 
-Si el navegador no soporta voz, quedan las manos.
+## Estética / archivos del look
+
+| Archivo | Qué hace |
+|---|---|
+| [styles/global.css](web/src/styles/global.css) | todo el look: crema + negro + magenta, tipografía Archivo Black / Parisienne, halftone, grano, layout por estado, versión apaisada |
+| [lib/escenario.js](web/src/lib/escenario.js) | arma la estrella SVG, la hace latir con la música, cambia de tono según las manos |
+| [lib/audioAnalisis.js](web/src/lib/audioAnalisis.js) | `energia()` 0..1 del audio para el latido de la estrella |
+| [lib/manosCanvas.js](web/src/lib/manosCanvas.js) | esqueleto de la mano estilo tinta |
 
 ## Assets offline
 
 `npm install` corre [web/scripts/preparar-mediapipe.mjs](web/scripts/preparar-mediapipe.mjs):
 copia los `.wasm` a `web/public/mediapipe/wasm`, baja los modelos
 (`hand_landmarker.task`, `blaze_face_short_range.tflite`) a `web/public/models/`
-y las fuentes (`Sora.ttf`, `Unbounded.ttf`) a `web/public/fonts/`. Todo gitignored.
-Para forzarlo: `npm -w web run prep:mediapipe`.
-
-## Three.js (pantalla principal)
-
-Estética synthwave con **bloom** (post-proceso), tone mapping filmico, tipografía
-Unbounded / Sora y viñeta cinematográfica.
-
-| Módulo | Qué hace |
-|---|---|
-| [three/escena.js](web/src/three/escena.js) | renderer + EffectComposer (UnrealBloom) + cámara + loop |
-| [three/escenarioPop.js](web/src/three/escenarioPop.js) | fondo 3D: cielo con aurora, piso infinito, haces, orbe, partículas |
-| [three/catalogo3D.js](web/src/three/catalogo3D.js) | lista de canciones flotante con realce del activo |
-| [three/letra3D.js](web/src/three/letra3D.js) | letra karaoke 3D sobre panel de vidrio, se ajusta para no salirse y entra con animación |
-| [three/visualizerAudio.js](web/src/three/visualizerAudio.js) | analizador de audio + halo de dos aros de barras |
-| [three/manosNeon.js](web/src/three/manosNeon.js) | esqueleto neón de hasta 2 manos |
+y las fuentes (`ArchivoBlack.ttf`, `Archivo.ttf`, `Parisienne.ttf`) a
+`web/public/fonts/`. Todo gitignored. Para forzarlo: `npm -w web run prep:mediapipe`.
 
 ## Agregar canciones
 
@@ -115,12 +107,13 @@ node server/scripts/agregar-cancion.mjs "blank_space" "https://youtu.be/XXXX" "B
 
 1. ✅ Cámara + audio local + letra sincronizada.
 2. ✅ Máquina de estados por WebSocket.
-3. ✅ Astro + Vite + Three.js (escenario, letra, visualizer, catálogo 3D).
-4. ✅ Control **solo por cámara**: manos (MediaPipe) + voz + filtro de color + corazón.
-5. ✅ Look aesthetic (bloom, synthwave, tipografía) + letra que entra en pantalla + volver al inicio si no hay nadie 10 s.
-6. ⬜ Biblioteca de 5–10 canciones descargadas y procesadas.
-7. ⬜ `ImageSegmenter` de MediaPipe: recortar a la persona y meterla en el escenario.
-8. ⬜ `PoseLandmarker`: cuerpo neón estilo Just Dance + puntaje real de performance.
-9. ⬜ Sensor ultrasónico (Arduino → serial/HTTP → `accion`).
-10. ⬜ Grabación del video + descarga por QR con id único de sesión.
-11. ⬜ Efectos de audio (Pedalboard) y mezcla de voz.
+3. ✅ Frontend Astro + Vite.
+4. ✅ Control **solo por cámara**: manos (MediaPipe) + voz + corazón.
+5. ✅ Vuelve al inicio si no hay nadie 10 s.
+6. ✅ Estética editorial / poster (sin luces), letra que entra en pantalla.
+7. ⬜ Biblioteca de 5–10 canciones descargadas y procesadas.
+8. ⬜ `ImageSegmenter` de MediaPipe: recortar a la persona sobre la estrella.
+9. ⬜ `PoseLandmarker`: cuerpo en tinta + puntaje real de performance.
+10. ⬜ Sensor ultrasónico (Arduino → serial/HTTP → `accion`).
+11. ⬜ Grabación del video + descarga por QR con id único de sesión.
+12. ⬜ Efectos de audio (Pedalboard) y mezcla de voz.

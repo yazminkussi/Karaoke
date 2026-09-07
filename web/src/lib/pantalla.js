@@ -3,18 +3,14 @@ import { parsearLRC, indiceActual } from './lrc.js';
 import { crearReconocimiento } from './vision.js';
 import { crearGestos } from './manos.js';
 import { crearVoz } from './voz.js';
-import { crearEscena } from '../three/escena.js';
-import { crearEscenarioPop } from '../three/escenarioPop.js';
-import { crearCatalogo3D } from '../three/catalogo3D.js';
-import { crearLetra3D } from '../three/letra3D.js';
-import { crearAudioReactivo } from '../three/visualizerAudio.js';
-import { crearManosNeon } from '../three/manosNeon.js';
+import { crearAnalisis } from './audioAnalisis.js';
+import { crearEscenario } from './escenario.js';
+import { crearManosCanvas } from './manosCanvas.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
 const video = $('#selfCam');
 const audio = $('#pista');
-const filtro = $('#filtro');
 const socket = conectar('pantalla');
 
 let estadoActual = 'ESPERANDO';
@@ -28,40 +24,35 @@ fetch('/api/canciones')
   .then((d) => (catalogoFull = d))
   .catch(() => {});
 
-// --- Escena 3D -----------------------------------------------------
-const escena = crearEscena($('#gl'));
-const escenario = crearEscenarioPop(escena.scene);
-const cat3D = crearCatalogo3D(escena);
-const letra3D = crearLetra3D(escena);
-const audioViz = crearAudioReactivo(escena.scene, audio);
-const manosNeon = crearManosNeon(escena);
-cat3D.setVisible(false);
-letra3D.grupo.visible = false;
+// --- Fondo poster + audio ------------------------------------------
+const escenario = crearEscenario($('#estrella-wrap'));
+const analisis = crearAnalisis(audio);
+const manosCanvas = crearManosCanvas($('#manos'), video);
 
-escena.onFrame((dt, t) => {
-  const energia = audioViz.energia();
-  escenario.update(dt, t, energia);
-  audioViz.update(dt, t);
-  cat3D.update(dt, t);
-  letra3D.update(dt, t);
-  manosNeon.update(datosManos, dt, t);
-});
+function frame() {
+  escenario.latir(analisis.tick());
+  manosCanvas.dibujar(datosManos);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
 
-// --- Camara + reconocimiento (MediaPipe manos) + voz --------------
+// --- Camara + MediaPipe (manos + persona) + voz ------------------
 const gestos = crearGestos({
   getEstado: () => estadoActual,
   onGesto: enviarAccion,
   onManos: (d) => {
     datosManos = d;
-    aplicarFiltro(d);
+    escenario.setModo(
+      d?.corazon ? 'corazon' : d?.cantidadManos >= 2 ? 'dos' : d?.cantidadManos === 1 ? 'una' : ''
+    );
+    if (d?.corazon) flashCorazon();
   },
 });
 
-// Si no hay una persona frente a la camara por 10s, se vuelve al inicio.
 const MS_SIN_PERSONA = 10_000;
 let ultimaPersona = performance.now();
-let visionActiva = false;
-const ESTADOS_CON_TIMEOUT = ['SELECCIONANDO', 'CONFIRMADA', 'COUNTDOWN', 'PLAYING'];
+let ultimoResultado = 0; // ultimo frame procesado por MediaPipe
+const ESTADOS_TIMEOUT = ['SELECCIONANDO', 'CONFIRMADA', 'COUNTDOWN', 'PLAYING'];
 
 navigator.mediaDevices
   .getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
@@ -71,22 +62,23 @@ navigator.mediaDevices
       video,
       numManos: 2,
       onResultado: ({ manos, hayPersona }) => {
+        ultimoResultado = performance.now();
         gestos({ manos });
         if (hayPersona) ultimaPersona = performance.now();
       },
     });
   })
-  .then(() => { visionActiva = true; })
   .catch((err) => {
     console.warn('camara / MediaPipe:', err.message);
     aviso('Cámara no disponible (' + err.name + ')');
   });
 
 setInterval(() => {
-  if (!visionActiva) return;
-  if (!ESTADOS_CON_TIMEOUT.includes(estadoActual)) return;
-  if (performance.now() - ultimaPersona > MS_SIN_PERSONA) {
-    ultimaPersona = performance.now(); // evita repetir
+  if (!ESTADOS_TIMEOUT.includes(estadoActual)) return;
+  const ahora = performance.now();
+  if (ahora - ultimoResultado > 3000) return; // el pipeline no esta dando frames
+  if (ahora - ultimaPersona > MS_SIN_PERSONA) {
+    ultimaPersona = ahora;
     console.log('[idle] 10s sin persona -> reset');
     enviarAccion({ tipo: 'reset' });
   }
@@ -94,31 +86,13 @@ setInterval(() => {
 
 crearVoz({
   getEstado: () => estadoActual,
-  getCatalogo: () => catalogoFull.length ? catalogoFull : catalogo,
+  getCatalogo: () => (catalogoFull.length ? catalogoFull : catalogo),
   onGesto: enviarAccion,
   onEstadoVoz: (txt) => ($('#vozStatus').textContent = txt),
 });
 
 function enviarAccion({ tipo, direccion, indice }) {
   socket.emit('accion', { evento: tipo, direccion, indice });
-}
-
-// --- Filtro de color por cantidad de manos / corazon -------------
-let ultimoCorazon = 0;
-function aplicarFiltro(d) {
-  if (!d) return;
-  if (d.corazon) {
-    filtro.style.background = 'rgba(255, 20, 147, 0.42)';
-    if (performance.now() - ultimoCorazon > 2500) {
-      ultimoCorazon = performance.now();
-      flash('💖');
-      escenario.pulso?.();
-    }
-    return;
-  }
-  if (d.cantidadManos >= 2) filtro.style.background = 'rgba(40, 200, 90, 0.30)';
-  else if (d.cantidadManos === 1) filtro.style.background = 'rgba(0, 150, 255, 0.28)';
-  else filtro.style.background = 'rgba(0, 0, 0, 0)';
 }
 
 // --- Estado global ---------------------------------------------
@@ -129,23 +103,20 @@ socket.on('estado', (snap) => {
 
   if (snap.canciones?.length && snap.canciones.length !== catalogo.length) {
     catalogo = snap.canciones;
-    cat3D.setCanciones(catalogo);
+    renderCatalogo();
   }
-
-  cat3D.setVisible(['SELECCIONANDO', 'CONFIRMADA'].includes(snap.nombre));
-  letra3D.grupo.visible = snap.nombre === 'PLAYING';
 
   switch (snap.nombre) {
     case 'SELECCIONANDO':
-      cat3D.setIndice(snap.indiceCancion);
+      marcarActiva(snap.indiceCancion);
       break;
     case 'CONFIRMADA':
-      $('#confirmadaTitulo').textContent = snap.cancion
-        ? `${snap.cancion.titulo} — ${snap.cancion.artista}`
+      $('#confTitulo').textContent = snap.cancion
+        ? `${snap.cancion.titulo} · ${snap.cancion.artista}`
         : '';
       break;
     case 'COUNTDOWN':
-      $('#countdownNum').textContent = snap.countdown ?? 3;
+      $('#cuenta').textContent = snap.countdown ?? 3;
       break;
     case 'PLAYING':
       if (cambio) arrancarCancion(snap.cancion);
@@ -160,7 +131,25 @@ socket.on('estado', (snap) => {
   estadoPrevio = snap.nombre;
 });
 
-// --- PLAYING: audio + letra ----------------------------------
+socket.on('feedback', ({ texto }) => flash(texto));
+
+// --- Catalogo ---------------------------------------------------
+function renderCatalogo() {
+  const ul = $('#lista');
+  ul.innerHTML = '';
+  catalogo.forEach((c) => {
+    const li = document.createElement('li');
+    li.innerHTML = `${c.titulo} <span class="art">${c.artista}</span>`;
+    ul.appendChild(li);
+  });
+}
+function marcarActiva(i) {
+  const ul = $('#lista');
+  [...ul.children].forEach((li, k) => li.classList.toggle('activa', k === i));
+  ul.children[i]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+// --- PLAYING: audio + letra --------------------------------
 let letras = [];
 let idxLetra = -1;
 let loopId = null;
@@ -178,7 +167,7 @@ async function arrancarCancion(cancion) {
   fallback = true;
   t0 = performance.now();
   clearTimeout(finTimer);
-  letra3D.setLineas('', '');
+  setLinea('', '');
 
   if (meta?.lrc) {
     try {
@@ -201,7 +190,7 @@ async function arrancarCancion(cancion) {
   finTimer = setTimeout(() => { if (fallback) socket.emit('cancion-fin'); }, dur * 1000);
 
   clearInterval(loopId);
-  loopId = setInterval(tickLetra, 50);
+  loopId = setInterval(tickLetra, 60);
 }
 
 function tickLetra() {
@@ -209,15 +198,43 @@ function tickLetra() {
   const nuevo = indiceActual(letras, t);
   if (nuevo !== idxLetra) {
     idxLetra = nuevo;
-    letra3D.setLineas(letras[nuevo]?.texto ?? '', letras[nuevo + 1]?.texto ?? '');
+    setLinea(letras[nuevo]?.texto ?? '', letras[nuevo + 1]?.texto ?? '');
   }
 }
+
+const elActual = $('#lineaActual');
+const elSig = $('#lineaSiguiente');
+function setLinea(a, b) {
+  elActual.textContent = a;
+  elSig.textContent = b;
+  elActual.hidden = !a;
+  // reinicia la animacion del subrayado magenta
+  elActual.classList.remove('entrando');
+  if (a) {
+    void elActual.offsetWidth;
+    elActual.classList.add('entrando');
+  }
+  ajustarLetra();
+}
+function ajustarLetra() {
+  if (!elActual.textContent) return;
+  const maxH = innerHeight * 0.4;
+  const maxW = $('#letra').clientWidth;
+  let size = Math.min(innerWidth * 0.09, innerHeight * 0.13);
+  elActual.style.fontSize = size + 'px';
+  let guard = 40;
+  while (guard-- > 0 && (elActual.scrollHeight > maxH || elActual.scrollWidth > maxW) && size > 16) {
+    size *= 0.93;
+    elActual.style.fontSize = size + 'px';
+  }
+}
+addEventListener('resize', ajustarLetra);
 
 function detenerCancion() {
   clearInterval(loopId);
   loopId = null;
   clearTimeout(finTimer);
-  letra3D.limpiar();
+  setLinea('', '');
   try {
     audio.pause();
     audio.removeAttribute('src');
@@ -225,10 +242,10 @@ function detenerCancion() {
   } catch {}
 }
 
-// --- RESULTADO ---------------------------------------------
+// --- RESULTADO --------------------------------------------
 function mostrarResultado(snap) {
   detenerCancion();
-  const el = $('#puntajeFinal');
+  const el = $('#score');
   let v = 0;
   const meta = snap.puntaje ?? 0;
   clearInterval(el._t);
@@ -244,15 +261,20 @@ function mostrarResultado(snap) {
     .catch(() => {});
 }
 
-// --- helpers UI -----------------------------------------
+// --- helpers UI ------------------------------------------
+let ultimoCorazon = 0;
+function flashCorazon() {
+  if (performance.now() - ultimoCorazon < 2500) return;
+  ultimoCorazon = performance.now();
+  flash('♥');
+}
 function flash(texto) {
   const el = $('#feedbackFlash');
   el.textContent = texto;
   el.classList.add('show');
   clearTimeout(el._t);
-  el._t = setTimeout(() => el.classList.remove('show'), 1200);
+  el._t = setTimeout(() => el.classList.remove('show'), 1100);
 }
-
 function aviso(txt) {
   const a = document.createElement('div');
   a.className = 'aviso';

@@ -60,17 +60,21 @@ const MODELOS = [
 ];
 for (const m of MODELOS) await bajar(m.url, join(modelosDir, m.nombre), m.nombre);
 
-// --- 3. Fuentes para el texto 3D ------------------------------
+// --- 3. Fuentes (estetica editorial) — self-host para andar offline -----
 const fuentesDir = join(raiz, 'public', 'fonts');
 await mkdir(fuentesDir, { recursive: true });
 const FUENTES = [
   {
-    nombre: 'Sora.ttf',
-    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/sora/Sora%5Bwght%5D.ttf',
+    nombre: 'ArchivoBlack.ttf',
+    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/archivoblack/ArchivoBlack-Regular.ttf',
   },
   {
-    nombre: 'Unbounded.ttf',
-    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/unbounded/Unbounded%5Bwght%5D.ttf',
+    nombre: 'Archivo.ttf',
+    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/archivo/Archivo%5Bwdth,wght%5D.ttf',
+  },
+  {
+    nombre: 'Parisienne.ttf',
+    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/parisienne/Parisienne-Regular.ttf',
   },
 ];
 for (const f of FUENTES) await bajar(f.url, join(fuentesDir, f.nombre), f.nombre);

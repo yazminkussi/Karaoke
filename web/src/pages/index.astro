@@ -3,48 +3,63 @@ import Base from '../layouts/Base.astro';
 ---
 
 <Base title="Karaoke · Pantalla principal">
-  <canvas id="gl"></canvas>
+  <div id="bg">
+    <div class="halftone h1"></div>
+    <div class="halftone h2"></div>
+    <div class="halftone h3"></div>
+  </div>
+  <div id="estrella-wrap"></div>
   <video id="selfCam" autoplay playsinline muted></video>
-  <div id="filtro"></div>
-  <div id="vineta"></div>
+  <canvas id="manos"></canvas>
+  <div id="tinte"></div>
+  <div id="grano"></div>
   <audio id="pista" preload="auto"></audio>
 
-  <div id="feedbackFlash"></div>
-
-  <!-- indicador de escucha por voz -->
+  <header id="marca">karaoke <span>studio</span></header>
   <div id="vozBox">🎙️ <span id="vozStatus">iniciando…</span></div>
+  <div id="feedbackFlash"></div>
 
   <!-- ESPERANDO -->
   <section class="ui" data-estado="ESPERANDO">
-    <h1>Sentite un cantante profesional</h1>
-    <p class="lead">Levantá la mano o decí <b>"cantar"</b> para vivir tu era popstar</p>
+    <p class="kicker">Sentite un cantante profesional</p>
+    <h1 class="cartel">Viví tu<br>era <span class="script">popstar</span></h1>
+    <p class="hint">Levantá la mano o decí "cantar"</p>
   </section>
 
   <!-- SELECCIONANDO -->
   <section class="ui" data-estado="SELECCIONANDO">
-    <h2>Elegí tu canción</h2>
-    <p class="hint">Mano arriba / abajo o decí el nombre · pellizcá o decí "confirmar"</p>
+    <p class="kicker">Elegí</p>
+    <h2 class="cartel">Tu canción</h2>
+    <ul id="lista"></ul>
+    <p class="hint">Mano arriba / abajo o decí el nombre · pellizcá para confirmar</p>
   </section>
 
   <!-- CONFIRMADA -->
   <section class="ui" data-estado="CONFIRMADA">
-    <h2>Preparando el escenario…</h2>
-    <p class="lead" id="confirmadaTitulo"></p>
+    <h2 class="cartel">Preparate</h2>
+    <p class="lead" id="confTitulo"></p>
   </section>
 
   <!-- COUNTDOWN -->
   <section class="ui" data-estado="COUNTDOWN">
-    <div id="countdownNum">3</div>
+    <div id="cuenta">3</div>
   </section>
 
-  <!-- PLAYING: la letra la dibuja Three.js -->
-  <section class="ui" data-estado="PLAYING"></section>
+  <!-- PLAYING -->
+  <section class="ui" data-estado="PLAYING">
+    <div id="letra">
+      <p id="lineaActual"></p>
+      <p id="lineaSiguiente"></p>
+    </div>
+  </section>
 
   <!-- RESULTADO -->
   <section class="ui" data-estado="RESULTADO">
-    <h1>¡Un éxito, popstar!</h1>
-    <div id="puntajeFinal">0</div>
-    <img id="qrResultado" class="qr" alt="QR para descargar tu video" />
+    <h1 class="cartel">Un éxito, <span class="script">popstar</span></h1>
+    <div id="resultadoRow">
+      <div id="score">0</div>
+      <div id="qrMarco"><img id="qrResultado" alt="QR para descargar tu video" /></div>
+    </div>
     <p class="hint">Escaneá para llevarte tu video</p>
   </section>
 
