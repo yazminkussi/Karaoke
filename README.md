@@ -97,11 +97,21 @@ y las fuentes (`ArchivoBlack.ttf`, `Archivo.ttf`, `Parisienne.ttf`) a
 
 ## Agregar canciones
 
-Requiere `yt-dlp` y `ffmpeg`.
+Requiere `yt-dlp` (`pip install yt-dlp`). `ffmpeg` es opcional — si no está, baja
+`.m4a` directo (lo reproducen Chrome/Edge igual).
 
 ```bash
-node server/scripts/agregar-cancion.mjs "blank_space" "https://youtu.be/XXXX" "Blank Space" "Taylor Swift" "1989"
+node server/scripts/agregar-cancion.mjs "corre" "https://www.youtube.com/watch?v=-RZZrPVk-Ac" "Corre" "Jesse & Joy" "¿Con quién se queda el perro?"
 ```
+
+Baja el audio a `server/canciones/corre/`, la letra sincronizada de
+[lrclib.net](https://lrclib.net), y actualiza `canciones.json`. Reiniciá el server.
+
+Si la letra va adelantada o atrasada respecto a la pista (pasa con las versiones
+karaoke, que tienen otra intro), ajustala **en vivo con `[` y `]`** durante
+PLAYING y guardá ese número en `"offsetLetra"` de la canción.
+
+Ya viene con **"Corre" (Jesse & Joy)** de ejemplo (probada, en sync).
 
 ## Roadmap
 
