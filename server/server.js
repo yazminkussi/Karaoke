@@ -17,12 +17,14 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import os from 'node:os';
 import QRCode from 'qrcode';
+import ffmpegPath from 'ffmpeg-static';
 
 import { crearMaquina, ESTADOS } from './stateMachine.js';
 
@@ -61,46 +63,74 @@ const maquina = crearMaquina({
 app.get('/api/canciones', (_req, res) => res.json(canciones));
 app.use('/canciones', express.static(join(__dirname, 'canciones')));
 
-// --- Grabaciones: la pantalla sube el video, el celular lo baja por QR ---
+// --- Grabaciones: la pantalla sube el .webm, el server lo pasa a .mp4 con
+//     ffmpeg, y el celular lo baja por QR ---
 const GRAB = join(__dirname, 'grabaciones');
 await mkdir(GRAB, { recursive: true });
 const idOk = (s) => /^[A-Za-z0-9]{4,40}$/.test(s || '');
+const enProceso = new Set();
 
-// La pantalla sube el .webm al terminar la cancion.
+function aMp4(sesion) {
+  const webm = join(GRAB, `${sesion}.webm`);
+  const mp4 = join(GRAB, `${sesion}.mp4`);
+  enProceso.add(sesion);
+  const args = [
+    '-y', '-i', webm,
+    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '25', '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac', '-b:a', '160k',
+    '-movflags', '+faststart',
+    mp4,
+  ];
+  execFile(ffmpegPath || 'ffmpeg', args, { maxBuffer: 1 << 26 }, async (err) => {
+    enProceso.delete(sesion);
+    if (err) {
+      console.warn(`[video] ffmpeg fallo (${sesion}):`, err.message.split('\n')[0]);
+      return;
+    }
+    console.log(`[video] ${sesion}.mp4 listo`);
+    await rm(webm, { force: true }).catch(() => {});
+  });
+}
+
 app.post(
   '/api/video/:sesion',
-  express.raw({ type: ['video/webm', 'application/octet-stream'], limit: '250mb' }),
+  express.raw({ type: ['video/webm', 'application/octet-stream'], limit: '400mb' }),
   async (req, res) => {
     if (!idOk(req.params.sesion) || !req.body?.length) return res.sendStatus(400);
     await writeFile(join(GRAB, `${req.params.sesion}.webm`), req.body);
-    console.log(`[video] guardado ${req.params.sesion}.webm (${(req.body.length / 1e6).toFixed(1)} MB)`);
+    console.log(`[video] recibido ${req.params.sesion}.webm (${(req.body.length / 1e6).toFixed(1)} MB) -> convirtiendo`);
     res.json({ ok: true });
+    aMp4(req.params.sesion);
   }
 );
 
-// El celular escanea el QR y cae aca. `/video/<id>.webm` = el archivo;
-// `/video/<id>` = la pagina con el reproductor + boton de descarga.
+// `/video/<id>.mp4` / `.webm` = archivo ; `/video/<id>` = pagina.
 app.get('/video/:archivo', (req, res) => {
   const a = req.params.archivo;
-  if (a.endsWith('.webm')) {
-    const s = a.slice(0, -5);
-    if (!idOk(s) || !existsSync(join(GRAB, `${s}.webm`))) return res.sendStatus(404);
-    return res.sendFile(join(GRAB, `${s}.webm`));
+  for (const ext of ['.mp4', '.webm']) {
+    if (a.endsWith(ext)) {
+      const s = a.slice(0, -ext.length);
+      const f = join(GRAB, `${s}${ext}`);
+      if (!idOk(s) || !existsSync(f)) return res.sendStatus(404);
+      return res.sendFile(f);
+    }
   }
   if (!idOk(a)) return res.sendStatus(404);
-  const existe = existsSync(join(GRAB, `${a}.webm`));
+  const listo = existsSync(join(GRAB, `${a}.mp4`));
+  const subiendo = !listo && !existsSync(join(GRAB, `${a}.webm`)) && !enProceso.has(a);
   res.type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Tu video · Karaoke</title>
 <style>body{margin:0;background:#0a0716;color:#f2eee5;font-family:system-ui,sans-serif;text-align:center;padding:24px}
 h1{font-weight:800}video{width:100%;max-width:520px;border-radius:14px;background:#000}
 a.btn{display:inline-block;margin-top:16px;background:#ec2f80;color:#fff;font-weight:700;text-decoration:none;padding:14px 22px;border-radius:999px}
-p{opacity:.7}</style></head><body>
+p{opacity:.75}</style></head><body>
 <h1>¡Sos una estrella! ⭐</h1>
-${existe
-  ? `<video src="/video/${a}.webm" controls playsinline></video><br>
-     <a class="btn" href="/video/${a}.webm" download="karaoke-${a}.webm">↓ Descargar</a>`
-  : `<p>Todavía se está subiendo tu video… recargá en unos segundos.</p>
-     <script>setTimeout(()=>location.reload(),4000)</script>`}
+${listo
+  ? `<video src="/video/${a}.mp4" controls playsinline></video><br>
+     <a class="btn" href="/video/${a}.mp4" download="karaoke-${a}.mp4">↓ Descargar (mp4)</a>`
+  : subiendo
+    ? `<p>Todavía no llegó tu video. Recargá en unos segundos.</p><script>setTimeout(()=>location.reload(),4000)</script>`
+    : `<p>Procesando tu video… (esto tarda ~30 s)</p><script>setTimeout(()=>location.reload(),5000)</script>`}
 </body></html>`);
 });
 

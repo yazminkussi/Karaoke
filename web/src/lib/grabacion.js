@@ -1,11 +1,6 @@
-// Grabación del cantante (MVP): graba el track de VIDEO de la cámara + el track
-// de AUDIO del micrófono, en paralelo, sin frenar nada. Devuelve un Blob webm.
-//
-// TODO (ver docs/investigacion-features.md #7):
-//   - compositor: dibujar cámara espejada + esqueleto de manos + una línea de
-//     letra + marca de agua en un canvas y grabar ESE canvas (captureStream).
-//   - mezclar también la pista de la canción (Web Audio + MediaStreamDestination).
-//   - subir el blob al server y servirlo por QR con el id de sesión.
+// Graba un MediaStream de video (el canvas compuesto: cámara + letra) + un
+// MediaStream de audio (canción + voz, mezclados por audioBus) -> Blob webm.
+// El server lo pasa a .mp4 con ffmpeg.
 
 export function crearGrabacion() {
   let rec = null;
@@ -13,29 +8,27 @@ export function crearGrabacion() {
   let blob = null;
 
   function mimeSoportado() {
-    const opciones = [
-      'video/webm;codecs=vp9,opus',
-      'video/webm;codecs=vp8,opus',
-      'video/webm',
-    ];
-    return opciones.find((m) => window.MediaRecorder?.isTypeSupported?.(m)) || '';
+    return (
+      ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'].find(
+        (m) => window.MediaRecorder?.isTypeSupported?.(m)
+      ) || ''
+    );
   }
 
-  // stream = el MediaStream de la cámara (con o sin audio)
-  function iniciar(stream) {
-    if (rec || !stream || !window.MediaRecorder) return;
-    const vtrack = stream.getVideoTracks()[0];
-    if (!vtrack) return;
-    const atracks = stream.getAudioTracks();
-    const grab = new MediaStream([vtrack, ...atracks]);
+  function iniciar(videoStream, audioStream) {
+    if (rec || !window.MediaRecorder) return;
+    const vt = videoStream?.getVideoTracks?.()[0];
+    if (!vt) return;
+    const at = audioStream?.getAudioTracks?.() || [];
+    const grab = new MediaStream([vt, ...at]);
 
     chunks = [];
     blob = null;
     try {
       const mimeType = mimeSoportado();
-      rec = new MediaRecorder(grab, mimeType ? { mimeType } : undefined);
+      rec = new MediaRecorder(grab, mimeType ? { mimeType, videoBitsPerSecond: 4_000_000 } : undefined);
     } catch (err) {
-      console.warn('[grabacion] no pude crear MediaRecorder:', err.message);
+      console.warn('[grabacion] MediaRecorder:', err.message);
       return;
     }
     rec.ondataavailable = (e) => e.data && e.data.size && chunks.push(e.data);
@@ -54,5 +47,10 @@ export function crearGrabacion() {
     });
   }
 
-  return { iniciar, detener, get blob() { return blob; }, get grabando() { return rec?.state === 'recording'; } };
+  return {
+    iniciar,
+    detener,
+    get blob() { return blob; },
+    get grabando() { return rec?.state === 'recording'; },
+  };
 }

@@ -3,10 +3,11 @@ import { parsearLRC, indiceActual } from './lrc.js';
 import { crearReconocimiento } from './vision.js';
 import { crearGestos } from './manos.js';
 import { crearVoz } from './voz.js';
-import { crearAnalisis } from './audioAnalisis.js';
+import { crearAudioBus } from './audioBus.js';
 import { crearEscenario } from './escenario.js';
 import { crearCamara } from './camaraCanvas.js';
 import { crearGrabacion } from './grabacion.js';
+import { crearGrabacionCanvas } from './grabacionCanvas.js';
 import { repartirDuo } from './duo.js';
 import { crearRetos } from './retos.js';
 
@@ -33,10 +34,14 @@ fetch('/api/canciones')
 
 // --- Fondo + audio + manos ------------------------------------------
 const escenario = crearEscenario($('#estrella-wrap'));
-const analisis = crearAnalisis(audio);
+const audioBus = crearAudioBus(audio);
 const camara = crearCamara($('#camara'), video);
 const grabacion = crearGrabacion();
 let camStream = null;
+
+// canvas 1280x720 que se GRABA: camara + letra + marca de agua
+let letraRec = { texto: '', hechas: 0, titulo: '' };
+const recCanvas = crearGrabacionCanvas(video, { getLetra: () => letraRec });
 
 const retos = crearRetos({
   onCartel: pintarReto,
@@ -45,9 +50,21 @@ const retos = crearRetos({
   },
 });
 
+// overlay de arranque: el primer toque desbloquea el audio (autoplay policy)
+const arrancar = $('#arrancar');
+const quitarArranque = () => {
+  audioBus.desbloquear();
+  arrancar?.remove();
+  removeEventListener('pointerdown', quitarArranque);
+  removeEventListener('keydown', quitarArranque);
+};
+addEventListener('pointerdown', quitarArranque);
+addEventListener('keydown', quitarArranque);
+
 function frame() {
-  escenario.latir(analisis.tick());
+  escenario.latir(audioBus.tick());
   camara.dibujar(datosManos, estadoActual);
+  if (grabacion.grabando) recCanvas.dibujar();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -86,6 +103,7 @@ navigator.mediaDevices
   .then((stream) => {
     camStream = stream;
     video.srcObject = stream;
+    audioBus.agregarMic(stream); // la voz entra a la grabación
     return crearReconocimiento({
       video,
       numManos: 2,
@@ -228,7 +246,9 @@ async function arrancarCancion(cancion) {
   barra.hidden = false;
   barraFill.style.width = '0%';
   retos.reset(performance.now());
-  grabacion.iniciar(camStream);
+  letraRec = { texto: '', hechas: 0, titulo: meta?.titulo || '' };
+  // graba el canvas compuesto (camara + letra) + audio (cancion + voz)
+  grabacion.iniciar(recCanvas.stream(30), audioBus.streamGrabacion());
 
   if (meta?.lrc) {
     try {
@@ -323,9 +343,11 @@ function mostrarLinea(idx, forzar = false) {
 
   if (!cur || !cur.texto) {
     elActual.hidden = true;
+    letraRec = { ...letraRec, texto: '', hechas: 0 };
     return;
   }
   elActual.hidden = false;
+  letraRec = { ...letraRec, texto: cur.texto, hechas: 0 };
 
   const trozos = cur.texto.split(/\s+/).filter(Boolean);
   const fin = letras[i + 1] ? letras[i + 1].tiempo : cur.tiempo + 4;
@@ -354,6 +376,7 @@ function pintarPalabras(t) {
     c.toggle('dicha', i < actual);
     c.toggle('actual', i === actual);
   }
+  if (letraRec.hechas !== actual + 1) letraRec = { ...letraRec, hechas: actual + 1 };
 }
 
 function ajustarLetra() {
@@ -414,21 +437,39 @@ function mostrarResultado(snap) {
     .then(({ dataUrl }) => { if (dataUrl) $('#qrResultado').src = dataUrl; })
     .catch(() => {});
 
-  // cerrar la grabación, subirla al server (para el QR) y dejar descarga local
+  // cerrar la grabación y subirla: el server la pasa a .mp4 con ffmpeg
   const bajar = $('#bajarVideo');
   bajar.hidden = true;
-  grabacion.detener().then((blob) => {
-    if (!blob || !blob.size) return;
-    bajar.href = URL.createObjectURL(blob);
-    bajar.download = `karaoke-${sesionActual || 'video'}.webm`;
+  bajar.textContent = '⏳ preparando tu video…';
+  grabacion.detener().then(async (blob) => {
+    if (!blob || !blob.size || !sesionActual) return;
     bajar.hidden = false;
-    if (sesionActual) {
-      fetch(`${SOCKET_URL}/api/video/${sesionActual}`, {
+    try {
+      await fetch(`${SOCKET_URL}/api/video/${sesionActual}`, {
         method: 'POST',
         headers: { 'Content-Type': 'video/webm' },
         body: blob,
-      }).catch((e) => console.warn('subida de video:', e.message));
+      });
+    } catch (e) {
+      console.warn('subida de video:', e.message);
     }
+    // esperar a que el mp4 esté listo (el server convierte en segundo plano)
+    const mp4 = `${SOCKET_URL}/video/${sesionActual}.mp4`;
+    for (let i = 0; i < 45; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      try {
+        const r = await fetch(mp4);
+        if (r.ok) {
+          bajar.href = URL.createObjectURL(await r.blob());
+          bajar.download = `karaoke-${sesionActual}.mp4`;
+          bajar.textContent = '↓ descargar mi video (mp4)';
+          return;
+        }
+      } catch {}
+    }
+    bajar.href = URL.createObjectURL(blob);
+    bajar.download = `karaoke-${sesionActual}.webm`;
+    bajar.textContent = '↓ descargar mi video';
   });
 }
 
