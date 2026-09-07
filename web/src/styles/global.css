@@ -1,0 +1,124 @@
+:root {
+  --rosa: #ff3ea5;
+  --violeta: #7b2ff7;
+  --cian: #21e6c1;
+  --oro: #ffcf40;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: #05050c;
+  color: #fff;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+}
+
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+
+/* Capas de la pantalla principal ------------------------------------ */
+#selfCam {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1); /* espejo */
+  /* las zonas oscuras del video dejan ver el escenario 3D de atras */
+  mix-blend-mode: screen;
+  z-index: 1;
+}
+
+#gl {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  display: block;
+}
+
+.ui {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  text-align: center;
+  padding: 4vmin;
+  pointer-events: none;
+}
+body[data-estado="ESPERANDO"]     .ui[data-estado="ESPERANDO"],
+body[data-estado="SELECCIONANDO"] .ui[data-estado="SELECCIONANDO"],
+body[data-estado="CONFIRMADA"]    .ui[data-estado="CONFIRMADA"],
+body[data-estado="COUNTDOWN"]     .ui[data-estado="COUNTDOWN"],
+body[data-estado="PLAYING"]       .ui[data-estado="PLAYING"],
+body[data-estado="RESULTADO"]     .ui[data-estado="RESULTADO"] { display: flex; }
+
+h1 { font-size: clamp(2rem, 6vmin, 4rem); text-shadow: 0 0 24px var(--rosa); }
+h2 { font-size: clamp(1.5rem, 4.5vmin, 3rem); text-shadow: 0 0 18px var(--violeta); }
+.lead { font-size: clamp(1.1rem, 3vmin, 2rem); color: var(--cian); }
+.hint { font-size: 1rem; opacity: 0.75; }
+
+.qr { width: min(38vmin, 320px); border-radius: 12px; background: #fff; padding: 8px; }
+
+/* La lista visible la dibuja Three.js (catalogo3D). Esta lista DOM queda solo
+   para lectores de pantalla / como respaldo si Three.js fallara. */
+.ui[data-estado="SELECCIONANDO"] { justify-content: flex-start; padding-top: 7vh; }
+
+#catalogo {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+#countdownNum {
+  font-size: 40vmin;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 0 60px var(--rosa);
+}
+
+#feedbackFlash {
+  position: fixed;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(1.5rem, 5vmin, 3rem);
+  font-weight: 900;
+  color: var(--cian);
+  text-shadow: 0 0 24px var(--cian);
+  opacity: 0;
+  transition: opacity .3s;
+  z-index: 4;
+}
+#feedbackFlash.show { opacity: 1; }
+
+#puntajeFinal {
+  font-size: 24vmin;
+  font-weight: 900;
+  background: linear-gradient(90deg, var(--rosa), var(--cian));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.aviso {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  background: #b00020;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  z-index: 9;
+}

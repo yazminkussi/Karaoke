@@ -1,5 +1,4 @@
 // Parser de archivos .lrc -> [{ tiempo: segundos, texto }]
-// Soporta multiples timestamps por linea: "[00:10.00][00:40.00]texto"
 export function parsearLRC(textoLRC) {
   const lineas = String(textoLRC).split(/\r?\n/);
   const resultado = [];
@@ -8,8 +7,7 @@ export function parsearLRC(textoLRC) {
   for (const linea of lineas) {
     tiempoRe.lastIndex = 0;
     const marcas = [...linea.matchAll(tiempoRe)];
-    if (marcas.length === 0) continue; // metadata [ti:], [ar:], etc.
-
+    if (marcas.length === 0) continue; // metadata [ti:], [ar:], ...
     const texto = linea.replace(tiempoRe, '').trim();
     for (const m of marcas) {
       const min = parseInt(m[1], 10);
@@ -18,12 +16,11 @@ export function parsearLRC(textoLRC) {
       resultado.push({ tiempo: min * 60 + seg + frac, texto });
     }
   }
-
   resultado.sort((a, b) => a.tiempo - b.tiempo);
   return resultado;
 }
 
-// Dado el array parseado y el tiempo actual, indice de la linea vigente (-1 si aun no arranco)
+// Indice de la linea vigente para el tiempo t (-1 si aun no arranco).
 export function indiceActual(letras, t) {
   let lo = 0;
   let hi = letras.length - 1;

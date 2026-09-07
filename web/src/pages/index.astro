@@ -1,0 +1,54 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="Karaoke · Pantalla principal">
+  <canvas id="gl"></canvas>
+  <video id="selfCam" autoplay playsinline muted></video>
+  <audio id="pista" preload="auto"></audio>
+
+  <div id="feedbackFlash"></div>
+
+  <!-- ESPERANDO -->
+  <section class="ui" data-estado="ESPERANDO">
+    <h1>Sentite un cantante profesional</h1>
+    <p class="lead">Levantá la mano para vivir tu era popstar</p>
+    <img id="qrOnboard" class="qr" alt="QR para abrir el control en tu celular" />
+    <p class="hint">o escaneá para usar tu celular como control</p>
+  </section>
+
+  <!-- SELECCIONANDO -->
+  <section class="ui" data-estado="SELECCIONANDO">
+    <h2>Elegí tu canción</h2>
+    <ul id="catalogo"></ul>
+    <p class="hint">Mano arriba / abajo para elegir · pellizcá y mantené para confirmar</p>
+  </section>
+
+  <!-- CONFIRMADA -->
+  <section class="ui" data-estado="CONFIRMADA">
+    <h2>Preparando el escenario…</h2>
+    <p class="lead" id="confirmadaTitulo"></p>
+  </section>
+
+  <!-- COUNTDOWN -->
+  <section class="ui" data-estado="COUNTDOWN">
+    <div id="countdownNum">3</div>
+  </section>
+
+  <!-- PLAYING: la letra la dibuja Three.js -->
+  <section class="ui" data-estado="PLAYING"></section>
+
+  <!-- RESULTADO -->
+  <section class="ui" data-estado="RESULTADO">
+    <h1>¡Un éxito, popstar!</h1>
+    <div id="puntajeFinal">0</div>
+    <img id="qrResultado" class="qr" alt="QR para descargar tu video" />
+    <p class="hint">Escaneá para llevarte tu video</p>
+  </section>
+
+  <!-- ml5.js (handPose / MediaPipe Hands) para el control por gestos -->
+  <script is:inline src="https://unpkg.com/ml5@1.2.1/dist/ml5.min.js"></script>
+  <script>
+    import '../lib/pantalla.js';
+  </script>
+</Base>

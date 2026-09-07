@@ -1,8 +1,8 @@
-/* global io */
-const socket = io({ query: { rol: 'control' } });
+import { conectar } from './socket.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
+const socket = conectar('control');
 
 socket.on('connect', () => {
   $('#dot').classList.add('on');
@@ -27,9 +27,9 @@ socket.on('estado', (snap) => {
   if (snap.nombre === 'RESULTADO') $('#score').textContent = snap.puntaje ?? 0;
 });
 
-socket.on('accion-rechazada', ({ evento, estado }) => {
-  console.warn(`accion "${evento}" rechazada en estado ${estado}`);
-});
+socket.on('accion-rechazada', ({ evento, estado }) =>
+  console.warn(`accion "${evento}" rechazada en ${estado}`)
+);
 
 function renderLista(snap) {
   const ul = $('#lista');
@@ -45,17 +45,13 @@ function renderLista(snap) {
   });
 }
 
-// Delegacion de todos los botones con data-accion / data-fb
 document.addEventListener('click', (e) => {
   const btn = e.target.closest('button');
   if (!btn) return;
-
   if (btn.dataset.accion) {
-    const payload = { evento: btn.dataset.accion };
-    if (btn.dataset.dir) payload.direccion = btn.dataset.dir;
-    socket.emit('accion', payload);
+    const p = { evento: btn.dataset.accion };
+    if (btn.dataset.dir) p.direccion = btn.dataset.dir;
+    socket.emit('accion', p);
   }
-  if (btn.dataset.fb) {
-    socket.emit('feedback-control', { texto: btn.dataset.fb });
-  }
+  if (btn.dataset.fb) socket.emit('feedback-control', { texto: btn.dataset.fb });
 });

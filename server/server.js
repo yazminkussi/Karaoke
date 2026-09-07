@@ -1,29 +1,37 @@
-// Servidor central del karaoke interactivo.
-// - Sirve la pantalla principal (/) y el control del celular (/control)
+// El cerebro del karaoke interactivo.
 // - Coordina la maquina de estados y la reparte a todos por Socket.IO
 // - Expone el catalogo de canciones y los archivos de audio/letra
+// - En produccion tambien sirve el frontend Astro ya compilado (web/dist)
 //
 // Arquitectura (ver investigacion):
 //   [Control celular] --WebSocket--> [este servidor] --WebSocket--> [Pantalla principal]
 //   [Sensor/camara]  --WebSocket-->      ^
+//
+// En desarrollo el frontend corre aparte con `astro dev` (puerto 4321) y se
+// conecta a este socket por su URL absoluta; por eso habilitamos CORS.
 
 import express from 'express';
+import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import os from 'node:os';
 import QRCode from 'qrcode';
 
-import { crearMaquina, ESTADOS } from './src/stateMachine.js';
+import { crearMaquina, ESTADOS } from './stateMachine.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
+const WEB_PORT = process.env.WEB_PORT || 4321; // astro dev
+const DIST = join(__dirname, '..', 'web', 'dist');
 
 const app = express();
+app.use(cors());
 const httpServer = createServer(app);
-const io = new Server(httpServer);
+const io = new Server(httpServer, { cors: { origin: '*' } });
 
 // --- Catalogo de canciones -------------------------------------------------
 async function cargarCanciones() {
@@ -47,23 +55,13 @@ const maquina = crearMaquina({
   onCambio: (snap) => io.emit('estado', snap),
 });
 
-// --- Rutas de paginas (antes del static para evitar redirecciones) -----
-app.get('/', (_req, res) =>
-  res.sendFile(join(__dirname, 'public', 'pantalla', 'index.html'))
-);
-app.get('/control', (_req, res) =>
-  res.sendFile(join(__dirname, 'public', 'control', 'index.html'))
-);
-
-// --- Archivos estaticos -------------------------------------------------
-app.use(express.static(join(__dirname, 'public')));
+// --- API --------------------------------------------------------------
+app.get('/api/canciones', (_req, res) => res.json(canciones));
 app.use('/canciones', express.static(join(__dirname, 'canciones')));
 
-app.get('/api/canciones', (_req, res) => res.json(canciones));
-
-// QR que apunta al control remoto (para la pantalla de RESULTADO / onboarding)
+// QR que apunta al control remoto (onboarding + pantalla de RESULTADO)
 app.get('/api/qr-control', async (_req, res) => {
-  const url = `http://${ipLocal()}:${PORT}/control`;
+  const url = urlControl();
   try {
     const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 320 });
     res.json({ url, dataUrl });
@@ -72,22 +70,26 @@ app.get('/api/qr-control', async (_req, res) => {
   }
 });
 
-// --- Socket.IO ----------------------------------------------------------
+// --- Frontend compilado (solo en produccion) --------------------------
+if (existsSync(DIST)) {
+  app.use(express.static(DIST));
+  app.get('/control', (_req, res) => res.sendFile(join(DIST, 'control', 'index.html')));
+  app.get('/', (_req, res) => res.sendFile(join(DIST, 'index.html')));
+}
+
+// --- Socket.IO --------------------------------------------------------
 io.on('connection', (socket) => {
   const rol = socket.handshake.query.rol || 'desconocido';
   console.log(`[socket] conexion (${rol}) ${socket.id}`);
 
-  // estado actual al recien llegado
   socket.emit('estado', maquina.snapshot());
 
-  // El control del celular y el sensor mandan acciones aca.
+  // Control del celular, gestos y sensor mandan acciones aca.
   socket.on('accion', ({ evento, ...payload } = {}) => {
     if (!evento) return;
     console.log(`[accion] ${rol} -> ${evento}`, payload);
     const ok = maquina.enviar(evento, payload);
-    if (!ok) {
-      socket.emit('accion-rechazada', { evento, estado: maquina.nombre });
-    }
+    if (!ok) socket.emit('accion-rechazada', { evento, estado: maquina.nombre });
   });
 
   // Reacciones del celular -> flash en la pantalla principal.
@@ -99,26 +101,34 @@ io.on('connection', (socket) => {
   socket.on('cancion-fin', () => maquina.enviar('fin'));
 
   // Puntaje calculado por la pantalla (ml5/performance) al terminar.
-  socket.on('puntaje', ({ valor } = {}) =>
-    maquina.enviar('fin', { puntaje: valor })
-  );
+  socket.on('puntaje', ({ valor } = {}) => maquina.enviar('fin', { puntaje: valor }));
 
   socket.on('disconnect', () =>
     console.log(`[socket] desconexion (${rol}) ${socket.id}`)
   );
 });
 
-// --- Arranque ---------------------------------------------------------
+// --- Arranque -------------------------------------------------------
 httpServer.listen(PORT, () => {
-  const ip = ipLocal();
-  console.log('\n  Karaoke interactivo en marcha');
+  console.log('\n  Karaoke interactivo - el cerebro');
   console.log('  ---------------------------------');
-  console.log(`  Pantalla principal : http://localhost:${PORT}/`);
-  console.log(`  Control (celular)  : http://${ip}:${PORT}/control`);
+  console.log(`  Socket.IO / API   : http://localhost:${PORT}`);
+  if (existsSync(DIST)) {
+    console.log(`  Frontend (build)  : http://localhost:${PORT}/`);
+  } else {
+    console.log(`  Frontend (dev)    : http://localhost:${WEB_PORT}/  (astro dev)`);
+  }
+  console.log(`  Control (celular)  : ${urlControl()}`);
   console.log(`  Estado inicial     : ${ESTADOS.ESPERANDO}`);
   console.log(`  Canciones cargadas : ${canciones.length}`);
   console.log('  (celular y compu deben estar en la misma red Wi-Fi)\n');
 });
+
+function urlControl() {
+  const ip = ipLocal();
+  const puerto = existsSync(DIST) ? PORT : WEB_PORT;
+  return `http://${ip}:${puerto}/control`;
+}
 
 function ipLocal() {
   const ifaces = os.networkInterfaces();

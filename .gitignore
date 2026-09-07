@@ -2,10 +2,15 @@ node_modules/
 *.log
 .DS_Store
 .env
+.env.production
 
-# Audio descargado (pesado / derechos de autor). Versiona solo los .lrc y canciones.json.
-canciones/**/*.mp3
-canciones/**/*.m4a
-canciones/**/*.wav
-!canciones/demo/
+# Astro
+web/dist/
+web/.astro/
+
+# Audio descargado (pesado / derechos de autor). Se versiona solo .lrc y canciones.json.
+server/canciones/**/*.mp3
+server/canciones/**/*.m4a
+server/canciones/**/*.wav
+!server/canciones/demo/
 grabaciones/
