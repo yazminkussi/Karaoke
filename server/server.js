@@ -127,6 +127,12 @@ io.on('connection', (socket) => {
   const rol = socket.handshake.query.rol || 'desconocido';
   console.log(`[socket] conexion (${rol}) ${socket.id}`);
 
+  // La pantalla es EL show: si (re)carga, siempre volvemos al inicio.
+  // Nunca debe abrir en el medio de una cancion.
+  if (rol === 'pantalla' && maquina.nombre !== ESTADOS.ESPERANDO) {
+    maquina.enviar('reset');
+  }
+
   socket.emit('estado', maquina.snapshot());
 
   // La pantalla (gestos + voz) y el sensor mandan acciones aca.
