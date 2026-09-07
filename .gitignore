@@ -19,5 +19,5 @@ web/public/fonts/
 server/canciones/**/*.mp3
 server/canciones/**/*.m4a
 server/canciones/**/*.wav
-!server/canciones/demo/
+server/grabaciones/
 grabaciones/

@@ -17,7 +17,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -61,11 +61,53 @@ const maquina = crearMaquina({
 app.get('/api/canciones', (_req, res) => res.json(canciones));
 app.use('/canciones', express.static(join(__dirname, 'canciones')));
 
-// QR de la pantalla de RESULTADO ("escanea para llevarte tu video").
-// TODO: apuntar a la URL real de descarga del video con el id de sesion.
+// --- Grabaciones: la pantalla sube el video, el celular lo baja por QR ---
+const GRAB = join(__dirname, 'grabaciones');
+await mkdir(GRAB, { recursive: true });
+const idOk = (s) => /^[A-Za-z0-9]{4,40}$/.test(s || '');
+
+// La pantalla sube el .webm al terminar la cancion.
+app.post(
+  '/api/video/:sesion',
+  express.raw({ type: ['video/webm', 'application/octet-stream'], limit: '250mb' }),
+  async (req, res) => {
+    if (!idOk(req.params.sesion) || !req.body?.length) return res.sendStatus(400);
+    await writeFile(join(GRAB, `${req.params.sesion}.webm`), req.body);
+    console.log(`[video] guardado ${req.params.sesion}.webm (${(req.body.length / 1e6).toFixed(1)} MB)`);
+    res.json({ ok: true });
+  }
+);
+
+// El celular escanea el QR y cae aca. `/video/<id>.webm` = el archivo;
+// `/video/<id>` = la pagina con el reproductor + boton de descarga.
+app.get('/video/:archivo', (req, res) => {
+  const a = req.params.archivo;
+  if (a.endsWith('.webm')) {
+    const s = a.slice(0, -5);
+    if (!idOk(s) || !existsSync(join(GRAB, `${s}.webm`))) return res.sendStatus(404);
+    return res.sendFile(join(GRAB, `${s}.webm`));
+  }
+  if (!idOk(a)) return res.sendStatus(404);
+  const existe = existsSync(join(GRAB, `${a}.webm`));
+  res.type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Tu video · Karaoke</title>
+<style>body{margin:0;background:#0a0716;color:#f2eee5;font-family:system-ui,sans-serif;text-align:center;padding:24px}
+h1{font-weight:800}video{width:100%;max-width:520px;border-radius:14px;background:#000}
+a.btn{display:inline-block;margin-top:16px;background:#ec2f80;color:#fff;font-weight:700;text-decoration:none;padding:14px 22px;border-radius:999px}
+p{opacity:.7}</style></head><body>
+<h1>¡Sos una estrella! ⭐</h1>
+${existe
+  ? `<video src="/video/${a}.webm" controls playsinline></video><br>
+     <a class="btn" href="/video/${a}.webm" download="karaoke-${a}.webm">↓ Descargar</a>`
+  : `<p>Todavía se está subiendo tu video… recargá en unos segundos.</p>
+     <script>setTimeout(()=>location.reload(),4000)</script>`}
+</body></html>`);
+});
+
+// QR de la pantalla de RESULTADO -> pagina de descarga del video.
 app.get('/api/qr-resultado', async (req, res) => {
   const sesion = req.query.sesion || '';
-  const url = `http://${ipLocal()}:${SERVIR_BUILD ? PORT : WEB_PORT}/video/${sesion}`;
+  const url = `http://${ipLocal()}:${PORT}/video/${sesion}`;
   try {
     const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 320 });
     res.json({ url, dataUrl });

@@ -1,12 +1,11 @@
 // Maquina de estados del karaoke (autoridad = servidor).
-// Refleja la tabla de la investigacion:
-//   ESPERANDO -> SELECCIONANDO -> CONFIRMADA -> COUNTDOWN -> PLAYING -> RESULTADO -> ESPERANDO
+//   ESPERANDO -> MODO -> SELECCIONANDO -> CONFIRMADA -> COUNTDOWN -> PLAYING -> RESULTADO -> ESPERANDO
 //
-// Cada cliente (pantalla principal y control del celular) recibe el estado
-// completo por Socket.IO y se limita a renderizar lo que corresponde.
+// La pantalla principal recibe el estado completo por Socket.IO y renderiza.
 
 export const ESTADOS = Object.freeze({
   ESPERANDO: 'ESPERANDO',
+  MODO: 'MODO',
   SELECCIONANDO: 'SELECCIONANDO',
   CONFIRMADA: 'CONFIRMADA',
   COUNTDOWN: 'COUNTDOWN',
@@ -14,38 +13,28 @@ export const ESTADOS = Object.freeze({
   RESULTADO: 'RESULTADO',
 });
 
-// Transiciones validas: estado -> { evento: estadoDestino }
 const TRANSICIONES = {
-  ESPERANDO: {
-    presencia: 'SELECCIONANDO',
+  ESPERANDO: { presencia: 'MODO' },
+  MODO: {
+    modo: 'SELECCIONANDO',
+    reset: 'ESPERANDO',
+    timeout: 'ESPERANDO',
   },
   SELECCIONANDO: {
     confirmar: 'CONFIRMADA',
     reset: 'ESPERANDO',
     timeout: 'ESPERANDO',
   },
-  CONFIRMADA: {
-    countdown: 'COUNTDOWN',
-    reset: 'ESPERANDO',
-  },
-  COUNTDOWN: {
-    play: 'PLAYING',
-    reset: 'ESPERANDO',
-  },
-  PLAYING: {
-    fin: 'RESULTADO',
-    interrupcion: 'RESULTADO',
-    reset: 'ESPERANDO',
-  },
-  RESULTADO: {
-    reset: 'ESPERANDO',
-    timeout: 'ESPERANDO',
-  },
+  CONFIRMADA: { countdown: 'COUNTDOWN', reset: 'ESPERANDO' },
+  COUNTDOWN: { play: 'PLAYING', reset: 'ESPERANDO' },
+  PLAYING: { fin: 'RESULTADO', interrupcion: 'RESULTADO', reset: 'ESPERANDO' },
+  RESULTADO: { reset: 'ESPERANDO', timeout: 'ESPERANDO' },
 };
 
 export function crearMaquina({ onCambio, canciones = [] } = {}) {
   const estado = {
     nombre: ESTADOS.ESPERANDO,
+    modo: 'solo', // 'solo' | 'duo'
     indiceCancion: 0,
     cancion: null,
     countdown: null,
@@ -65,13 +54,12 @@ export function crearMaquina({ onCambio, canciones = [] } = {}) {
     return t;
   };
 
-  function emitir() {
-    if (onCambio) onCambio(snapshot());
-  }
+  const emitir = () => onCambio && onCambio(snapshot());
 
   function snapshot() {
     return {
       nombre: estado.nombre,
+      modo: estado.modo,
       indiceCancion: estado.indiceCancion,
       cancion: estado.cancion,
       countdown: estado.countdown,
@@ -82,6 +70,7 @@ export function crearMaquina({ onCambio, canciones = [] } = {}) {
         titulo: c.titulo,
         artista: c.artista,
         era: c.era ?? null,
+        voces: c.voces ?? 'solo',
       })),
     };
   }
@@ -91,12 +80,11 @@ export function crearMaquina({ onCambio, canciones = [] } = {}) {
     emitir();
   }
 
-  // Procesa un evento entrante. Devuelve true si produjo una transicion.
   function enviar(evento, payload = {}) {
     const mapa = TRANSICIONES[estado.nombre] || {};
     const destino = mapa[evento];
 
-    // Eventos que no cambian de estado pero si de data (scroll del catalogo)
+    // eventos que cambian data pero no de estado
     if (evento === 'scroll' && estado.nombre === ESTADOS.SELECCIONANDO) {
       const n = estado.canciones.length || 1;
       const dir = payload.direccion === 'arriba' ? -1 : 1;
@@ -106,10 +94,15 @@ export function crearMaquina({ onCambio, canciones = [] } = {}) {
     }
     if (evento === 'seleccionar' && estado.nombre === ESTADOS.SELECCIONANDO) {
       if (Number.isInteger(payload.indice)) {
-        estado.indiceCancion = Math.max(
-          0,
-          Math.min(payload.indice, estado.canciones.length - 1)
-        );
+        estado.indiceCancion = Math.max(0, Math.min(payload.indice, estado.canciones.length - 1));
+        emitir();
+      }
+      return true;
+    }
+    // elegir modo dentro de MODO no cambia de estado hasta confirmar
+    if (evento === 'setModo' && estado.nombre === ESTADOS.MODO) {
+      if (payload.valor === 'solo' || payload.valor === 'duo') {
+        estado.modo = payload.valor;
         emitir();
       }
       return true;
@@ -118,11 +111,19 @@ export function crearMaquina({ onCambio, canciones = [] } = {}) {
     if (!destino) return false;
 
     switch (destino) {
+      case ESTADOS.MODO:
+        limpiarTimers();
+        estado.modo = 'solo';
+        estado.indiceCancion = 0;
+        agendar(() => enviar('timeout'), 25_000);
+        irA(ESTADOS.MODO);
+        break;
+
       case ESTADOS.SELECCIONANDO:
         limpiarTimers();
+        if (payload.valor === 'solo' || payload.valor === 'duo') estado.modo = payload.valor;
         estado.cancion = null;
         estado.puntaje = null;
-        // timeout de inactividad -> vuelve a ESPERANDO (30s segun la doc)
         agendar(() => enviar('timeout'), 30_000);
         irA(ESTADOS.SELECCIONANDO);
         break;
@@ -131,7 +132,6 @@ export function crearMaquina({ onCambio, canciones = [] } = {}) {
         limpiarTimers();
         estado.cancion = estado.canciones[estado.indiceCancion] ?? null;
         irA(ESTADOS.CONFIRMADA);
-        // preparacion del escenario -> arranca countdown solo
         agendar(() => enviar('countdown'), 1200);
         break;
 
@@ -162,20 +162,23 @@ export function crearMaquina({ onCambio, canciones = [] } = {}) {
 
       case ESTADOS.RESULTADO:
         limpiarTimers();
-        // puntaje placeholder hasta integrar evaluacion real de performance
-        estado.puntaje =
-          payload.puntaje ?? Math.floor(70 + Math.random() * 30);
+        estado.puntaje = Number.isFinite(payload.puntaje)
+          ? Math.round(payload.puntaje)
+          : Math.floor(70 + Math.random() * 30);
         irA(ESTADOS.RESULTADO);
-        agendar(() => enviar('timeout'), 20_000);
+        agendar(() => enviar('timeout'), 25_000);
         break;
 
       case ESTADOS.ESPERANDO:
         limpiarTimers();
-        estado.cancion = null;
-        estado.countdown = null;
-        estado.puntaje = null;
-        estado.sesionId = null;
-        estado.indiceCancion = 0;
+        Object.assign(estado, {
+          modo: 'solo',
+          cancion: null,
+          countdown: null,
+          puntaje: null,
+          sesionId: null,
+          indiceCancion: 0,
+        });
         irA(ESTADOS.ESPERANDO);
         break;
     }
@@ -186,7 +189,5 @@ export function crearMaquina({ onCambio, canciones = [] } = {}) {
 }
 
 function nuevaSesionId() {
-  return (
-    Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-  ).toUpperCase();
+  return (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)).toUpperCase();
 }

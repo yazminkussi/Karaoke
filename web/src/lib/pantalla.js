@@ -6,17 +6,22 @@ import { crearVoz } from './voz.js';
 import { crearAnalisis } from './audioAnalisis.js';
 import { crearEscenario } from './escenario.js';
 import { crearManosCanvas } from './manosCanvas.js';
-import { crearPersonaCanvas } from './personaCanvas.js';
 import { crearGrabacion } from './grabacion.js';
+import { repartirDuo } from './duo.js';
+import { crearRetos } from './retos.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
 const video = $('#selfCam');
 const audio = $('#pista');
 const socket = conectar('pantalla');
+const SOCKET_URL =
+  import.meta.env.PUBLIC_SOCKET_URL ||
+  (import.meta.env.DEV ? `http://${location.hostname}:3000` : location.origin);
 
 let estadoActual = 'ESPERANDO';
 let estadoPrevio = null;
+let modoActual = 'solo';
 let catalogo = [];
 let catalogoFull = [];
 let datosManos = null;
@@ -26,26 +31,28 @@ fetch('/api/canciones')
   .then((d) => (catalogoFull = d))
   .catch(() => {});
 
-// --- Fondo poster + audio ------------------------------------------
+// --- Fondo + audio + manos ------------------------------------------
 const escenario = crearEscenario($('#estrella-wrap'));
 const analisis = crearAnalisis(audio);
 const manosCanvas = crearManosCanvas($('#manos'), video);
-const persona = crearPersonaCanvas($('#persona'), video);
 const grabacion = crearGrabacion();
 let camStream = null;
 
+const retos = crearRetos({
+  onCartel: pintarReto,
+  onResultado: ({ ok, puntos }) => {
+    if (ok) flash('¡BIEN! +' + puntos);
+  },
+});
+
 function frame() {
   escenario.latir(analisis.tick());
-  if (persona.lista) {
-    persona.dibujar();
-    if (!body.classList.contains('recorte')) body.classList.add('recorte');
-  }
   if (!datosManos || !datosManos.manos?.length) manosCanvas.dibujar(null);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
-// --- Camara + MediaPipe (manos + persona) + voz ------------------
+// --- MediaPipe + gestos + voz -----------------------------------
 const gestos = crearGestos({
   getEstado: () => estadoActual,
   onGesto: enviarAccion,
@@ -55,13 +62,14 @@ const gestos = crearGestos({
       d?.corazon ? 'corazon' : d?.cantidadManos >= 2 ? 'dos' : d?.cantidadManos === 1 ? 'una' : ''
     );
     if (d?.corazon) flashCorazon();
+    if (estadoActual === 'MODO') pintarModo(d);
   },
 });
 
 const MS_SIN_PERSONA = 10_000;
 let ultimaPersona = performance.now();
-let ultimoResultado = 0; // ultimo frame procesado por MediaPipe
-const ESTADOS_TIMEOUT = ['SELECCIONANDO', 'CONFIRMADA', 'COUNTDOWN', 'PLAYING'];
+let ultimoResultado = 0;
+const ESTADOS_TIMEOUT = ['MODO', 'SELECCIONANDO', 'CONFIRMADA', 'COUNTDOWN', 'PLAYING'];
 
 navigator.mediaDevices
   .getUserMedia({ video: { width: 1280, height: 720 }, audio: true })
@@ -71,11 +79,10 @@ navigator.mediaDevices
     return crearReconocimiento({
       video,
       numManos: 2,
-      onMascara: persona.setMascara,
       onResultado: ({ manos, hayPersona }) => {
         ultimoResultado = performance.now();
-        gestos({ manos }); // esto actualiza datosManos via onManos
-        manosCanvas.dibujar(datosManos); // dibujar en el MISMO frame -> sin desfase
+        gestos({ manos });
+        manosCanvas.dibujar(datosManos);
         if (hayPersona) ultimaPersona = performance.now();
       },
     });
@@ -88,7 +95,7 @@ navigator.mediaDevices
 setInterval(() => {
   if (!ESTADOS_TIMEOUT.includes(estadoActual)) return;
   const ahora = performance.now();
-  if (ahora - ultimoResultado > 3000) return; // el pipeline no esta dando frames
+  if (ahora - ultimoResultado > 3000) return;
   if (ahora - ultimaPersona > MS_SIN_PERSONA) {
     ultimaPersona = ahora;
     console.log('[idle] 10s sin persona -> reset');
@@ -103,15 +110,17 @@ crearVoz({
   onEstadoVoz: (txt) => ($('#vozStatus').textContent = txt),
 });
 
-function enviarAccion({ tipo, direccion, indice }) {
-  socket.emit('accion', { evento: tipo, direccion, indice });
+function enviarAccion({ tipo, direccion, indice, valor }) {
+  socket.emit('accion', { evento: tipo, direccion, indice, valor });
 }
 
 // --- Estado global ---------------------------------------------
 socket.on('estado', (snap) => {
   const cambio = snap.nombre !== estadoPrevio;
   estadoActual = snap.nombre;
+  modoActual = snap.modo || 'solo';
   body.dataset.estado = snap.nombre;
+  body.dataset.modo = modoActual;
 
   if (snap.canciones?.length && snap.canciones.length !== catalogo.length) {
     catalogo = snap.canciones;
@@ -119,6 +128,9 @@ socket.on('estado', (snap) => {
   }
 
   switch (snap.nombre) {
+    case 'MODO':
+      $('#modoSel')?.setAttribute('data-elegido', modoActual);
+      break;
     case 'SELECCIONANDO':
       marcarActiva(snap.indiceCancion);
       break;
@@ -145,13 +157,22 @@ socket.on('estado', (snap) => {
 
 socket.on('feedback', ({ texto }) => flash(texto));
 
-// --- Catalogo ---------------------------------------------------
+// --- MODO: elegir solo / dúo ------------------------------------
+function pintarModo(d) {
+  const el = $('#modoSel');
+  if (!el) return;
+  el.dataset.hover = d?.modoElegido || '';
+  el.style.setProperty('--prog', (d?.modoProgreso || 0).toFixed(2));
+}
+
+// --- Catálogo -------------------------------------------------
 function renderCatalogo() {
   const ul = $('#lista');
   ul.innerHTML = '';
   catalogo.forEach((c) => {
     const li = document.createElement('li');
-    li.innerHTML = `${c.titulo} <span class="art">${c.artista}</span>`;
+    const duo = c.voces === 'duo' ? ' <b class="tag-duo">dúo</b>' : '';
+    li.innerHTML = `${c.titulo} <span class="art">${c.artista}</span>${duo}`;
     ul.appendChild(li);
   });
 }
@@ -161,15 +182,18 @@ function marcarActiva(i) {
   ul.children[i]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
 
-// --- PLAYING: audio + letra --------------------------------
+// --- PLAYING: audio + letra + retos --------------------------
 let letras = [];
+let voces = []; // 'p1'|'p2'|'both' por línea (modo dúo)
 let idxLetra = -1;
 let loopId = null;
 let t0 = 0;
 let fallback = true;
 let finTimer = null;
-let offsetLetra = 0; // ajuste fino: +/- segundos entre la pista y el .lrc
+let offsetLetra = 0;
 let duracionCancion = 40;
+let sesionActual = '';
+let mandoFin = false;
 const barra = $('#progreso');
 const barraFill = barra.querySelector('span');
 
@@ -179,8 +203,10 @@ async function arrancarCancion(cancion) {
     catalogo.find((c) => c.id === cancion?.id) ||
     cancion;
   letras = [];
+  voces = [];
   idxLetra = -1;
   fallback = true;
+  mandoFin = false;
   t0 = performance.now();
   offsetLetra = Number(meta?.offsetLetra) || 0;
   duracionCancion = Number(meta?.duracion) || 40;
@@ -188,13 +214,13 @@ async function arrancarCancion(cancion) {
   mostrarLinea(-1, true);
   barra.hidden = false;
   barraFill.style.width = '0%';
-
-  // graba en paralelo (camara + microfono)
+  retos.reset(performance.now());
   grabacion.iniciar(camStream);
 
   if (meta?.lrc) {
     try {
       letras = parsearLRC(await fetch(meta.lrc).then((r) => r.text()));
+      if (modoActual === 'duo') voces = repartirDuo(letras);
     } catch (e) {
       console.warn('letra:', e.message);
     }
@@ -209,23 +235,24 @@ async function arrancarCancion(cancion) {
     audio.addEventListener('playing', () => {
       fallback = false;
       clearTimeout(finTimer);
-      // red de seguridad por si el evento 'ended' no dispara (m4a DASH, etc.)
-      finTimer = setTimeout(() => socket.emit('cancion-fin'), (audio.duration || dur) * 1000 + 4000);
+      finTimer = setTimeout(finDeCancion, (audio.duration || dur) * 1000 + 4000);
     }, { once: true });
-    audio.addEventListener('ended', () => socket.emit('cancion-fin'), { once: true });
+    audio.addEventListener('ended', finDeCancion, { once: true });
     audio.addEventListener('error', () => { fallback = true; }, { once: true });
   }
-  finTimer = setTimeout(() => { if (fallback) socket.emit('cancion-fin'); }, dur * 1000);
+  finTimer = setTimeout(() => { if (fallback) finDeCancion(); }, dur * 1000);
 
   clearInterval(loopId);
   loopId = setInterval(tickLetra, 60);
 }
 
-function tickLetra() {
-  const base = !fallback && !audio.paused ? audio.currentTime : (performance.now() - t0) / 1000;
-  const t = base - offsetLetra;
+function relojBase() {
+  return !fallback && !audio.paused ? audio.currentTime : (performance.now() - t0) / 1000;
+}
 
-  // barra de progreso
+function tickLetra() {
+  const base = relojBase();
+  const t = base - offsetLetra;
   barraFill.style.width =
     Math.max(0, Math.min(100, (base / duracionCancion) * 100)).toFixed(1) + '%';
 
@@ -235,40 +262,51 @@ function tickLetra() {
     mostrarLinea(nuevo);
   }
   pintarPalabras(t);
+  retos.tick(performance.now(), datosManos);
 }
 
-// Ajuste fino de sincronía en vivo: [ y ] mueven la letra -/+ 0.2s.
+function finDeCancion() {
+  if (mandoFin) return;
+  mandoFin = true;
+  // puntaje = base por completar + bonus de retos
+  const avance = Math.min(1, relojBase() / duracionCancion);
+  const base = Math.round(45 + avance * 30);
+  const valor = Math.min(100, base + retos.puntaje);
+  socket.emit('puntaje', { valor });
+}
+
+// Ajuste fino de sincronía en vivo: [ y ]
 addEventListener('keydown', (e) => {
   if (estadoActual !== 'PLAYING') return;
   if (e.key === '[') offsetLetra -= 0.2;
   else if (e.key === ']') offsetLetra += 0.2;
   else return;
-  idxLetra = -2; // fuerza refresco
+  idxLetra = -2;
   $('#vozStatus').textContent = `offset ${offsetLetra.toFixed(1)}s`;
   console.log('[letra] offsetLetra =', offsetLetra.toFixed(2));
 });
 
 const elActual = $('#lineaActual');
 const elSig = $('#lineaSiguiente');
-let palabras = []; // [{ span, t0 }] de la linea actual
-let lineaRender = -99; // qué línea real está en pantalla (evita re-render en los silencios)
+let palabras = [];
+let lineaRender = -99;
 
-// Enseña la línea `idx` como palabras, con un t0 estimado por palabra
-// (interpolado dentro de la línea, proporcional a la cantidad de letras).
 function mostrarLinea(idx, forzar = false) {
-  // durante un silencio del .lrc, mostramos por adelantado la próxima línea
-  // (sin resaltar nada todavía) para que la pantalla no quede vacía.
   let i = idx;
   while (letras[i] && !letras[i].texto) i++;
-  if (!forzar && i === lineaRender && idx >= 0) return; // ya está en pantalla
+  if (!forzar && i === lineaRender && idx >= 0) return;
   lineaRender = i;
 
   elActual.innerHTML = '';
   palabras = [];
   const cur = letras[i];
-
   const sig = [letras[i + 1], letras[i + 2]].find((l) => l?.texto)?.texto || '';
   elSig.textContent = sig;
+
+  // color por voz (modo dúo)
+  const voz = voces[i] || 'p1';
+  elActual.dataset.voz = modoActual === 'duo' ? voz : '';
+  elSig.dataset.voz = modoActual === 'duo' ? (voces[i + 1] || voz) : '';
 
   if (!cur || !cur.texto) {
     elActual.hidden = true;
@@ -288,7 +326,6 @@ function mostrarLinea(idx, forzar = false) {
     palabras.push({ span, t0: cur.tiempo + (acc / totalCh) * dur });
     acc += w.length;
   }
-
   elActual.classList.remove('entrando');
   void elActual.offsetWidth;
   elActual.classList.add('entrando');
@@ -326,6 +363,7 @@ function detenerCancion() {
   clearTimeout(finTimer);
   mostrarLinea(-1, true);
   barra.hidden = true;
+  pintarReto(null);
   try {
     audio.pause();
     audio.removeAttribute('src');
@@ -333,9 +371,21 @@ function detenerCancion() {
   } catch {}
 }
 
-// --- RESULTADO --------------------------------------------
+// --- Retos: cartel ------------------------------------------
+function pintarReto(reto) {
+  const el = $('#reto');
+  if (!el) return;
+  if (!reto) { el.hidden = true; return; }
+  el.hidden = false;
+  $('#retoIcono').textContent = reto.icono;
+  $('#retoTexto').textContent = reto.texto;
+  el.style.setProperty('--resto', (reto.resto ?? 1).toFixed(2));
+}
+
+// --- RESULTADO ---------------------------------------------
 function mostrarResultado(snap) {
   detenerCancion();
+  sesionActual = snap.sesionId || '';
   const el = $('#score');
   let v = 0;
   const meta = snap.puntaje ?? 0;
@@ -346,20 +396,26 @@ function mostrarResultado(snap) {
     if (v >= meta) clearInterval(el._t);
   }, 25);
 
-  fetch('/api/qr-resultado?sesion=' + encodeURIComponent(snap.sesionId || ''))
+  fetch('/api/qr-resultado?sesion=' + encodeURIComponent(sesionActual))
     .then((r) => r.json())
     .then(({ dataUrl }) => { if (dataUrl) $('#qrResultado').src = dataUrl; })
     .catch(() => {});
 
-  // cerrar la grabacion y ofrecer el video
+  // cerrar la grabación, subirla al server (para el QR) y dejar descarga local
   const bajar = $('#bajarVideo');
   bajar.hidden = true;
   grabacion.detener().then((blob) => {
     if (!blob || !blob.size) return;
     bajar.href = URL.createObjectURL(blob);
-    bajar.download = `karaoke-${(snap.cancion?.id || 'video')}-${snap.sesionId || ''}.webm`;
+    bajar.download = `karaoke-${sesionActual || 'video'}.webm`;
     bajar.hidden = false;
-    // TODO: subir el blob al server para servirlo por el QR
+    if (sesionActual) {
+      fetch(`${SOCKET_URL}/api/video/${sesionActual}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'video/webm' },
+        body: blob,
+      }).catch((e) => console.warn('subida de video:', e.message));
+    }
   });
 }
 

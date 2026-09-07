@@ -23,6 +23,8 @@
   --tinta: #161513;
   --rosa: #e0447f;
   --rosa-hot: #ec2f80;
+  --p1: #ec2f80; /* voz 1 (dúo) */
+  --p2: #2f7de0; /* voz 2 (dúo) */
 
   --fat: "Archivo Black", "Arial Black", system-ui, sans-serif;
   --body: "Archivo", system-ui, -apple-system, sans-serif;
@@ -78,21 +80,6 @@ img { max-width: 100%; }
   z-index: 1;
   filter: grayscale(0.32) contrast(1.06) saturate(1.05) brightness(1.03);
 }
-/* con recorte de persona, el video crudo se usa solo como fuente (invisible) */
-body.recorte #selfCam { opacity: 0; }
-
-/* la persona recortada va POR ENCIMA de la UI (no queda tapada por nada) */
-#persona {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 7;
-  pointer-events: none;
-  transform: scaleX(-1); /* mismo espejo que el video */
-  display: none;
-}
-body.recorte #persona { display: block; }
 
 /* velo crema: tiñe el video hacia la paleta poster y hace que el texto se lea */
 #velo {
@@ -104,16 +91,15 @@ body.recorte #persona { display: block; }
   mix-blend-mode: normal;
 }
 
-/* Estrella magenta como grafico de collage sobre el video */
+/* Estrella magenta: destello en la esquina (no tapa a la persona ni al texto) */
 #estrella-wrap {
   position: fixed;
-  left: 50%;
-  bottom: -6vmin;
-  width: min(74vmin, 92vw, 68vh);
+  left: -26vmin;
+  bottom: -26vmin;
+  width: min(72vmin, 96vw);
   aspect-ratio: 1;
-  transform: translateX(-50%);
   z-index: 3;
-  opacity: 0.9;
+  opacity: 0.92;
   pointer-events: none;
   mix-blend-mode: multiply;
 }
@@ -122,7 +108,7 @@ body.recorte #persona { display: block; }
   width: 100%;
   height: 100%;
   transform: scale(var(--pulso));
-  transform-origin: 50% 62%;
+  transform-origin: 30% 70%;
   animation: girar 44s linear infinite;
   transition: transform 0.15s ease-out;
 }
@@ -235,6 +221,7 @@ body.recorte #persona { display: block; }
   background: radial-gradient(ellipse 70% 60% at 50% 45%, rgba(242, 238, 229, 0.72), rgba(242, 238, 229, 0.2) 80%);
 }
 body[data-estado="ESPERANDO"]     .ui[data-estado="ESPERANDO"],
+body[data-estado="MODO"]          .ui[data-estado="MODO"],
 body[data-estado="SELECCIONANDO"] .ui[data-estado="SELECCIONANDO"],
 body[data-estado="CONFIRMADA"]    .ui[data-estado="CONFIRMADA"],
 body[data-estado="COUNTDOWN"]     .ui[data-estado="COUNTDOWN"],
@@ -344,6 +331,83 @@ body[data-estado="RESULTADO"]     .ui[data-estado="RESULTADO"] {
   align-self: center;
   rotate: -1.2deg;
 }
+.tag-duo {
+  font-family: var(--body);
+  font-weight: 800;
+  font-size: 0.3em;
+  vertical-align: middle;
+  background: var(--p2);
+  color: #fff;
+  padding: 0.15em 0.5em;
+  border-radius: 0.5em;
+  letter-spacing: 0.06em;
+}
+
+/* ---- MODO: solo / dúo ---- */
+#modoSel {
+  --prog: 0;
+  display: flex;
+  gap: 3vmin;
+  margin-top: 3vmin;
+}
+#modoSel .opc {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4vmin;
+  padding: 3vmin 4vmin;
+  border: 3px solid var(--tinta);
+  border-radius: 1.4vmin;
+  background: var(--crema);
+  transition: transform 0.15s, background 0.15s, color 0.15s;
+}
+#modoSel .op-icono { font-size: clamp(2rem, 7vmin, 4rem); }
+#modoSel .op-txt { font-family: var(--fat); font-size: clamp(1.1rem, 3.4vmin, 2.2rem); }
+#modoSel .op-sub { font-family: var(--body); font-weight: 700; font-size: 0.8rem; letter-spacing: 0.1em; opacity: 0.6; }
+/* opción marcada por el estado del server */
+#modoSel[data-elegido="solo"] .opc[data-opc="solo"],
+#modoSel[data-elegido="duo"] .opc[data-opc="duo"] {
+  background: var(--tinta);
+  color: var(--crema);
+}
+/* la que estás "mirando" con las manos: barra de carga */
+#modoSel[data-hover="solo"] .opc[data-opc="solo"],
+#modoSel[data-hover="duo"] .opc[data-opc="duo"] {
+  transform: scale(1.06);
+  box-shadow: inset 0 calc(-1 * var(--prog) * 100%) 0 var(--rosa);
+}
+
+/* ---- reto (acciones con la mano) ---- */
+#reto {
+  --resto: 1;
+  position: fixed;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  background: var(--tinta);
+  color: var(--crema);
+  font-family: var(--fat);
+  text-transform: uppercase;
+  font-size: clamp(0.9rem, 2.6vmin, 1.6rem);
+  padding: 0.6rem 1.2rem 0.9rem;
+  border-radius: 0.8rem;
+  rotate: -1.5deg;
+  overflow: hidden;
+}
+#reto #retoIcono { font-size: 1.5em; }
+#reto .reto-barra {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 5px;
+  width: calc(var(--resto) * 100%);
+  background: var(--rosa-hot);
+  transition: width 0.1s linear;
+}
 
 /* countdown */
 #cuenta {
@@ -381,7 +445,7 @@ body[data-estado="RESULTADO"]     .ui[data-estado="RESULTADO"] {
   transition: color 0.1s;
   color: color-mix(in srgb, var(--tinta) 42%, transparent);
 }
-#lineaActual span.dicha { color: var(--rosa-hot); }
+#lineaActual span.dicha { color: var(--voz, var(--rosa-hot)); }
 #lineaActual span.actual { color: var(--tinta); }
 #lineaActual span.actual::after {
   content: "";
@@ -390,10 +454,30 @@ body[data-estado="RESULTADO"]     .ui[data-estado="RESULTADO"] {
   right: 0.28em;
   bottom: 0.1em;
   height: 0.3em;
-  background: var(--rosa);
+  background: var(--voz, var(--rosa));
   z-index: -1;
   rotate: -1.5deg;
 }
+/* modo dúo: cada línea toma el color de su voz */
+#lineaActual[data-voz="p1"] { --voz: var(--p1); }
+#lineaActual[data-voz="p2"] { --voz: var(--p2); }
+#lineaActual[data-voz="both"] { --voz: var(--tinta); }
+#lineaActual[data-voz="p1"]::before,
+#lineaActual[data-voz="p2"]::before,
+#lineaActual[data-voz="both"]::before {
+  content: attr(data-voz);
+  display: block;
+  font-family: var(--body);
+  font-weight: 800;
+  font-size: 0.9rem;
+  letter-spacing: 0.16em;
+  color: var(--voz);
+  margin-bottom: 0.3em;
+}
+#lineaActual[data-voz="p1"]::before { content: "VOZ 1"; }
+#lineaActual[data-voz="p2"]::before { content: "VOZ 2"; }
+#lineaActual[data-voz="both"]::before { content: "LOS DOS"; }
+
 #lineaSiguiente {
   font-family: var(--fat);
   text-transform: uppercase;
@@ -403,6 +487,8 @@ body[data-estado="RESULTADO"]     .ui[data-estado="RESULTADO"] {
   color: var(--tinta);
   opacity: 0.38;
 }
+#lineaSiguiente[data-voz="p1"] { color: var(--p1); opacity: 0.5; }
+#lineaSiguiente[data-voz="p2"] { color: var(--p2); opacity: 0.5; }
 
 /* resultado */
 #resultadoRow {

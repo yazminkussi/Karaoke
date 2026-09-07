@@ -29,14 +29,5 @@
     "lrc": "/canciones/me-rehuso/me-rehuso.lrc",
     "duracion": 203,
     "offsetLetra": 0
-  },
-  {
-    "id": "demo",
-    "titulo": "Canción Demo",
-    "artista": "Karaoke Interactivo",
-    "era": "Debug",
-    "audio": "/canciones/demo/demo.mp3",
-    "lrc": "/canciones/demo/demo.lrc",
-    "duracion": 40
   }
 ]

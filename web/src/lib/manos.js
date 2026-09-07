@@ -11,6 +11,7 @@ const UMBRAL_PELLIZCO = 0.45; // dist pulgar-indice / tamano de la mano
 const MS_PRESENCIA = 700;
 const MS_CONFIRMAR = 1100;
 const MS_SCROLL = 550;
+const MS_MODO = 1200; // mantener 1 o 2 manos para elegir solo / duo
 
 export function crearGestos({ getEstado, onGesto, onManos }) {
   const st = {
@@ -21,17 +22,47 @@ export function crearGestos({ getEstado, onGesto, onManos }) {
     pinchStart: 0,
     pinchProgress: 0,
     confirmEnviado: false,
+    modoDesde: 0,
+    modoCount: 0,
+    modoEnviado: false,
   };
 
   // Se llama en cada frame de MediaPipe con { manos: [{puntos, lado}] }
   return function procesar({ manos }) {
     const estado = getEstado();
+    const ahora = performance.now();
     if (estado !== st.lastEstado) {
       if (estado === 'ESPERANDO') st.presenciaEnviada = false;
       st.pinchStart = 0;
       st.pinchProgress = 0;
       st.confirmEnviado = false;
+      st.modoDesde = 0;
+      st.modoCount = 0;
+      st.modoEnviado = false;
       st.lastEstado = estado;
+    }
+
+    // --- MODO: mantener 1 mano (solo) o 2 (duo) para elegir ---
+    if (estado === 'MODO') {
+      const n = manos.length;
+      if (n !== st.modoCount) {
+        st.modoCount = n;
+        st.modoDesde = ahora;
+      }
+      const eleccion = n === 1 ? 'solo' : n >= 2 ? 'duo' : null;
+      const progreso = eleccion ? Math.min(1, (ahora - st.modoDesde) / MS_MODO) : 0;
+      if (eleccion && progreso >= 1 && !st.modoEnviado) {
+        st.modoEnviado = true;
+        onGesto({ tipo: 'modo', valor: eleccion });
+      }
+      onManos?.({
+        manos: manos.map((m) => ({ puntos: m.puntos })),
+        cantidadManos: n,
+        corazon: false,
+        modoElegido: eleccion,
+        modoProgreso: progreso,
+      });
+      return;
     }
 
     const mano = manos[0];
@@ -44,7 +75,6 @@ export function crearGestos({ getEstado, onGesto, onManos }) {
     }
 
     const kp = mano.puntos;
-    const ahora = performance.now();
     const tam = d(kp[0], kp[9]) || 1;
     const pellizco = d(kp[4], kp[8]) / tam < UMBRAL_PELLIZCO;
     const ny = kp[9].y; // 0 arriba .. 1 abajo

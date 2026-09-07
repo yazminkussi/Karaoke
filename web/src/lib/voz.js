@@ -15,6 +15,8 @@ const PALABRAS = {
   reset: ['salir', 'cancelar', 'cancela', 'volver', 'volve', 'basta', 'chau', 'terminar', 'termina', 'atras total'],
   scrollAbajo: ['siguiente', 'proxima', 'proximo', 'baja', 'abajo', 'siguiente cancion'],
   scrollArriba: ['anterior', 'previa', 'sube', 'arriba', 'atras'],
+  solo: ['solo', 'sola', 'una', 'uno', 'individual', 'yo sola', 'yo solo'],
+  duo: ['duo', 'dua', 'dos', 'pareja', 'competencia', 'los dos', 'de a dos'],
 };
 
 export function crearVoz({ getEstado, getCatalogo, onGesto, onEstadoVoz }) {
@@ -72,6 +74,11 @@ function interpretar(frase, { getEstado, getCatalogo, onGesto }) {
   }
   if (estado === 'ESPERANDO' && incluyeAlguna(frase, PALABRAS.presencia)) {
     onGesto({ tipo: 'presencia' });
+    return;
+  }
+  if (estado === 'MODO') {
+    if (incluyeAlguna(frase, PALABRAS.duo)) return onGesto({ tipo: 'modo', valor: 'duo' });
+    if (incluyeAlguna(frase, PALABRAS.solo)) return onGesto({ tipo: 'modo', valor: 'solo' });
     return;
   }
   if (estado === 'SELECCIONANDO') {

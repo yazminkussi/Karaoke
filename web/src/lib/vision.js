@@ -1,24 +1,17 @@
 // Reconocimiento de la cámara con MediaPipe Tasks Vision (Google).
-//   - HandLandmarker  : manos (gestos) — con filtro One Euro para que no tiemble
-//   - FaceDetector    : "hay una persona" (volver al inicio si se va)
-//   - ImageSegmenter  : recorta a la persona (para que quede DELANTE de la UI)
+//   - HandLandmarker : manos (gestos) — con filtro One Euro para que no tiemble
+//   - FaceDetector   : "hay una persona" (volver al inicio si se va)
 //
 // Assets desde /mediapipe/wasm, /models (web/scripts/preparar-mediapipe.mjs).
 
-import {
-  FilesetResolver,
-  HandLandmarker,
-  FaceDetector,
-  ImageSegmenter,
-} from '@mediapipe/tasks-vision';
+import { FilesetResolver, HandLandmarker, FaceDetector } from '@mediapipe/tasks-vision';
 import { crearFiltroMano } from './oneEuro.js';
 
 const WASM = '/mediapipe/wasm';
 const MODELO_MANOS = '/models/hand_landmarker.task';
 const MODELO_CARA = '/models/blaze_face_short_range.tflite';
-const MODELO_SEG = '/models/selfie_segmenter.tflite';
 
-export async function crearReconocimiento({ video, numManos = 2, onResultado, onMascara }) {
+export async function crearReconocimiento({ video, numManos = 2, onResultado }) {
   const fileset = await FilesetResolver.forVisionTasks(WASM);
 
   const handLandmarker = await crearCon(HandLandmarker, fileset, {
@@ -41,23 +34,9 @@ export async function crearReconocimiento({ video, numManos = 2, onResultado, on
     console.warn('[vision] FaceDetector no disponible:', err.message);
   }
 
-  let segmenter = null;
-  if (onMascara) {
-    try {
-      segmenter = await crearCon(ImageSegmenter, fileset, {
-        baseOptions: { modelAssetPath: MODELO_SEG },
-        runningMode: 'VIDEO',
-        outputCategoryMask: false,
-        outputConfidenceMasks: true,
-      });
-    } catch (err) {
-      console.warn('[vision] ImageSegmenter no disponible:', err.message);
-    }
-  }
-
   await esperarVideo(video);
 
-  const filtros = new Map(); // lado ("Left"/"Right"/idx) -> filtro One Euro
+  const filtros = new Map(); // lado -> filtro One Euro
   let ultimoT = -1;
   let corriendo = true;
   let hayPersona = false;
@@ -86,18 +65,6 @@ export async function crearReconocimiento({ video, numManos = 2, onResultado, on
         }
       }
 
-      if (segmenter) {
-        try {
-          segmenter.segmentForVideo(video, ts, (r) => {
-            const m = r.confidenceMasks?.[0];
-            if (m) onMascara(m.getAsFloat32Array(), m.width, m.height);
-            r.close?.();
-          });
-        } catch {
-          /* frames sueltos */
-        }
-      }
-
       const manos = normalizar(manosRes, filtros, ts);
       onResultado({ manos, hayPersona: hayPersona || manos.length > 0 });
     }
@@ -106,12 +73,10 @@ export async function crearReconocimiento({ video, numManos = 2, onResultado, on
   requestAnimationFrame(loop);
 
   return {
-    tieneSegmentacion: !!segmenter,
     detener: () => {
       corriendo = false;
       handLandmarker.close?.();
       faceDetector?.close?.();
-      segmenter?.close?.();
     },
   };
 }

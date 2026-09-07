@@ -11,7 +11,6 @@ import Base from '../layouts/Base.astro';
   <video id="selfCam" autoplay playsinline muted></video>
   <div id="velo"></div>
   <div id="estrella-wrap"></div>
-  <canvas id="persona"></canvas>
   <canvas id="manos"></canvas>
   <div id="tinte"></div>
   <div id="grano"></div>
@@ -26,6 +25,23 @@ import Base from '../layouts/Base.astro';
     <p class="kicker">Sentite un cantante profesional</p>
     <h1 class="cartel">Viví tu<br>era <span class="script">popstar</span></h1>
     <p class="hint">Levantá la mano o decí "cantar"</p>
+  </section>
+
+  <!-- MODO: solo o dúo -->
+  <section class="ui" data-estado="MODO">
+    <p class="kicker">¿Cómo cantás?</p>
+    <div id="modoSel">
+      <div class="opc" data-opc="solo">
+        <span class="op-icono">🙋</span>
+        <span class="op-txt">SOLO</span>
+      </div>
+      <div class="opc" data-opc="duo">
+        <span class="op-icono">🙌</span>
+        <span class="op-txt">DÚO</span>
+        <span class="op-sub">competencia</span>
+      </div>
+    </div>
+    <p class="hint">1 mano = solo · 2 manos = dúo · o decilo · mantené para elegir</p>
   </section>
 
   <!-- SELECCIONANDO -->
@@ -53,6 +69,11 @@ import Base from '../layouts/Base.astro';
       <p id="lineaActual"></p>
       <p id="lineaSiguiente"></p>
     </div>
+    <div id="reto" hidden>
+      <span id="retoIcono"></span>
+      <span id="retoTexto"></span>
+      <span class="reto-barra"></span>
+    </div>
   </section>
   <div id="progreso" hidden><span></span></div>
 
@@ -64,7 +85,7 @@ import Base from '../layouts/Base.astro';
       <div id="qrMarco"><img id="qrResultado" alt="QR para descargar tu video" /></div>
     </div>
     <a id="bajarVideo" hidden download="mi-karaoke.webm">↓ descargar mi video</a>
-    <p class="hint">Escaneá para llevarte tu video</p>
+    <p class="hint">Escaneá el QR para llevarte tu video</p>
   </section>
 
   <script>
