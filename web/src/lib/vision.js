@@ -1,50 +1,67 @@
 // Reconocimiento de la camara con MediaPipe Tasks Vision (Google).
-// Por ahora: HandLandmarker (manos). Mas adelante se pueden sumar
-// PoseLandmarker (cuerpo neon) e ImageSegmenter (recortar el fondo).
+//   - HandLandmarker : manos (gestos)
+//   - FaceDetector   : "hay una persona" (para volver al inicio si se va)
 //
-// Los assets (wasm + modelo .task) se sirven desde /mediapipe/wasm y /models,
-// que deja el script web/scripts/preparar-mediapipe.mjs (postinstall).
+// Assets servidos desde /mediapipe/wasm, /models (los deja
+// web/scripts/preparar-mediapipe.mjs en el postinstall).
 
-import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
+import { FilesetResolver, HandLandmarker, FaceDetector } from '@mediapipe/tasks-vision';
 
 const WASM = '/mediapipe/wasm';
 const MODELO_MANOS = '/models/hand_landmarker.task';
+const MODELO_CARA = '/models/blaze_face_short_range.tflite';
 
-export async function crearReconocimientoManos({ video, numManos = 2, onResultado }) {
+export async function crearReconocimiento({ video, numManos = 2, onResultado }) {
   const fileset = await FilesetResolver.forVisionTasks(WASM);
 
-  let handLandmarker;
+  const handLandmarker = await crearCon(HandLandmarker, fileset, {
+    baseOptions: { modelAssetPath: MODELO_MANOS },
+    runningMode: 'VIDEO',
+    numHands: numManos,
+  });
+
+  let faceDetector = null;
   try {
-    handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODELO_MANOS, delegate: 'GPU' },
+    faceDetector = await crearCon(FaceDetector, fileset, {
+      baseOptions: { modelAssetPath: MODELO_CARA },
       runningMode: 'VIDEO',
-      numHands: numManos,
+      minDetectionConfidence: 0.4,
     });
   } catch (err) {
-    console.warn('[vision] GPU no disponible, reintento con CPU:', err.message);
-    handLandmarker = await HandLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODELO_MANOS, delegate: 'CPU' },
-      runningMode: 'VIDEO',
-      numHands: numManos,
-    });
+    console.warn('[vision] FaceDetector no disponible:', err.message);
   }
 
   await esperarVideo(video);
 
   let ultimoT = -1;
   let corriendo = true;
+  let hayPersona = false;
 
   function loop() {
     if (!corriendo) return;
     if (video.readyState >= 2 && video.currentTime !== ultimoT) {
       ultimoT = video.currentTime;
-      let res;
+      const ts = performance.now();
+
+      let manosRes;
       try {
-        res = handLandmarker.detectForVideo(video, performance.now());
+        manosRes = handLandmarker.detectForVideo(video, ts);
       } catch (err) {
-        console.warn('[vision] detectForVideo:', err.message);
+        console.warn('[vision] manos:', err.message);
       }
-      if (res) onResultado(normalizar(res));
+
+      if (faceDetector) {
+        try {
+          const f = faceDetector.detectForVideo(video, ts);
+          hayPersona = (f?.detections?.length || 0) > 0;
+        } catch {
+          /* ignora frames sueltos */
+        }
+      }
+
+      // si hay manos, obviamente hay persona
+      const manos = normalizarManos(manosRes);
+      onResultado({ manos, hayPersona: hayPersona || manos.length > 0 });
     }
     requestAnimationFrame(loop);
   }
@@ -54,18 +71,32 @@ export async function crearReconocimientoManos({ video, numManos = 2, onResultad
     detener: () => {
       corriendo = false;
       handLandmarker.close?.();
+      faceDetector?.close?.();
     },
   };
 }
 
-// Devuelve las manos con los 21 puntos ya normalizados 0..1 y ESPEJADOS en x
-// (para que coincidan con el <video> que se muestra en espejo), + la lateralidad.
-function normalizar(res) {
-  const manos = (res.landmarks || []).map((pts, i) => ({
+async function crearCon(Clase, fileset, opciones) {
+  try {
+    return await Clase.createFromOptions(fileset, {
+      ...opciones,
+      baseOptions: { ...opciones.baseOptions, delegate: 'GPU' },
+    });
+  } catch (err) {
+    console.warn(`[vision] ${Clase.name} sin GPU, uso CPU:`, err.message);
+    return await Clase.createFromOptions(fileset, {
+      ...opciones,
+      baseOptions: { ...opciones.baseOptions, delegate: 'CPU' },
+    });
+  }
+}
+
+// 21 puntos por mano, normalizados 0..1 y ESPEJADOS en x (el video se ve en espejo).
+function normalizarManos(res) {
+  return (res?.landmarks || []).map((pts, i) => ({
     puntos: pts.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z })),
-    lado: res.handednesses?.[i]?.[0]?.categoryName || null, // "Left" / "Right"
+    lado: res.handednesses?.[i]?.[0]?.categoryName || null,
   }));
-  return { manos };
 }
 
 function esperarVideo(video) {

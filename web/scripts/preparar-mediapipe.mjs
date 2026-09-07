@@ -1,9 +1,9 @@
-// Deja MediaPipe Tasks Vision listo para funcionar OFFLINE:
-//   - copia los .wasm de @mediapipe/tasks-vision a web/public/mediapipe/wasm
-//   - descarga los modelos .task a web/public/models (si faltan)
+// Deja listos los assets que se sirven desde public/ y no van al repo:
+//   - .wasm de @mediapipe/tasks-vision   -> public/mediapipe/wasm
+//   - modelos .task / .tflite de MediaPipe -> public/models
+//   - fuentes .ttf para el texto 3D (troika) -> public/fonts
 //
 // Corre solo con `npm install` (postinstall) o `npm -w web run prep:mediapipe`.
-// Los assets quedan en public/ (gitignored) para no meter binarios al repo.
 
 import { cp, mkdir, access, writeFile } from 'node:fs/promises';
 import { createWriteStream } from 'node:fs';
@@ -15,52 +15,64 @@ import { createRequire } from 'node:module';
 
 const raiz = join(dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
-
 const existe = (p) => access(p).then(() => true).catch(() => false);
 
-// --- 1. WASM -------------------------------------------------------
+async function bajar(url, destino, nombre) {
+  if (await existe(destino)) {
+    console.log(`[assets] ${nombre} ya esta`);
+    return;
+  }
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    await pipeline(Readable.fromWeb(res.body), createWriteStream(destino));
+    console.log(`[assets] ${nombre} descargado`);
+  } catch (err) {
+    console.warn(`[assets] no pude bajar ${nombre} (${err.message}).\n  ${url}`);
+  }
+}
+
+// --- 1. WASM de MediaPipe ---------------------------------------
 const wasmOrigen = join(dirname(require.resolve('@mediapipe/tasks-vision')), 'wasm');
 const wasmDestino = join(raiz, 'public', 'mediapipe', 'wasm');
 try {
   await mkdir(wasmDestino, { recursive: true });
   await cp(wasmOrigen, wasmDestino, { recursive: true });
-  console.log('[mediapipe] wasm copiado a public/mediapipe/wasm');
+  console.log('[assets] wasm de MediaPipe copiado');
 } catch (err) {
-  console.warn('[mediapipe] no pude copiar el wasm:', err.message);
+  console.warn('[assets] no pude copiar el wasm:', err.message);
 }
 
-// --- 2. Modelos ---------------------------------------------------
+// --- 2. Modelos de MediaPipe -----------------------------------
+const modelosDir = join(raiz, 'public', 'models');
+await mkdir(modelosDir, { recursive: true });
 const MODELOS = [
   {
     nombre: 'hand_landmarker.task',
     url: 'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task',
   },
-  // para mas adelante (pose neon estilo Just Dance / recorte de fondo):
+  {
+    nombre: 'blaze_face_short_range.tflite',
+    url: 'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+  },
+  // para mas adelante (pose neon / recorte de fondo):
   // { nombre: 'pose_landmarker_lite.task', url: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task' },
-  // { nombre: 'selfie_segmenter.tflite', url: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite' },
 ];
+for (const m of MODELOS) await bajar(m.url, join(modelosDir, m.nombre), m.nombre);
 
-const modelosDir = join(raiz, 'public', 'models');
-await mkdir(modelosDir, { recursive: true });
+// --- 3. Fuentes para el texto 3D ------------------------------
+const fuentesDir = join(raiz, 'public', 'fonts');
+await mkdir(fuentesDir, { recursive: true });
+const FUENTES = [
+  {
+    nombre: 'Sora.ttf',
+    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/sora/Sora%5Bwght%5D.ttf',
+  },
+  {
+    nombre: 'Unbounded.ttf',
+    url: 'https://raw.githubusercontent.com/google/fonts/main/ofl/unbounded/Unbounded%5Bwght%5D.ttf',
+  },
+];
+for (const f of FUENTES) await bajar(f.url, join(fuentesDir, f.nombre), f.nombre);
 
-for (const m of MODELOS) {
-  const destino = join(modelosDir, m.nombre);
-  if (await existe(destino)) {
-    console.log(`[mediapipe] ${m.nombre} ya esta`);
-    continue;
-  }
-  try {
-    const res = await fetch(m.url);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    await pipeline(Readable.fromWeb(res.body), createWriteStream(destino));
-    console.log(`[mediapipe] ${m.nombre} descargado`);
-  } catch (err) {
-    console.warn(
-      `[mediapipe] no pude bajar ${m.nombre} (${err.message}). ` +
-        `Descargalo a mano en web/public/models/ desde:\n  ${m.url}`
-    );
-  }
-}
-
-// marcador para .gitkeep del dir
 await writeFile(join(raiz, 'public', 'mediapipe', '.gitkeep'), '').catch(() => {});

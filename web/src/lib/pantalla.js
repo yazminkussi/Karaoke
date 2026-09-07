@@ -1,6 +1,6 @@
 import { conectar } from './socket.js';
 import { parsearLRC, indiceActual } from './lrc.js';
-import { crearReconocimientoManos } from './vision.js';
+import { crearReconocimiento } from './vision.js';
 import { crearGestos } from './manos.js';
 import { crearVoz } from './voz.js';
 import { crearEscena } from '../three/escena.js';
@@ -35,7 +35,7 @@ const cat3D = crearCatalogo3D(escena);
 const letra3D = crearLetra3D(escena);
 const audioViz = crearAudioReactivo(escena.scene, audio);
 const manosNeon = crearManosNeon(escena);
-cat3D.grupo.visible = false;
+cat3D.setVisible(false);
 letra3D.grupo.visible = false;
 
 escena.onFrame((dt, t) => {
@@ -57,16 +57,40 @@ const gestos = crearGestos({
   },
 });
 
+// Si no hay una persona frente a la camara por 10s, se vuelve al inicio.
+const MS_SIN_PERSONA = 10_000;
+let ultimaPersona = performance.now();
+let visionActiva = false;
+const ESTADOS_CON_TIMEOUT = ['SELECCIONANDO', 'CONFIRMADA', 'COUNTDOWN', 'PLAYING'];
+
 navigator.mediaDevices
   .getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
   .then((stream) => {
     video.srcObject = stream;
-    return crearReconocimientoManos({ video, numManos: 2, onResultado: gestos });
+    return crearReconocimiento({
+      video,
+      numManos: 2,
+      onResultado: ({ manos, hayPersona }) => {
+        gestos({ manos });
+        if (hayPersona) ultimaPersona = performance.now();
+      },
+    });
   })
+  .then(() => { visionActiva = true; })
   .catch((err) => {
     console.warn('camara / MediaPipe:', err.message);
     aviso('Cámara no disponible (' + err.name + ')');
   });
+
+setInterval(() => {
+  if (!visionActiva) return;
+  if (!ESTADOS_CON_TIMEOUT.includes(estadoActual)) return;
+  if (performance.now() - ultimaPersona > MS_SIN_PERSONA) {
+    ultimaPersona = performance.now(); // evita repetir
+    console.log('[idle] 10s sin persona -> reset');
+    enviarAccion({ tipo: 'reset' });
+  }
+}, 1000);
 
 crearVoz({
   getEstado: () => estadoActual,
@@ -108,7 +132,7 @@ socket.on('estado', (snap) => {
     cat3D.setCanciones(catalogo);
   }
 
-  cat3D.grupo.visible = ['SELECCIONANDO', 'CONFIRMADA'].includes(snap.nombre);
+  cat3D.setVisible(['SELECCIONANDO', 'CONFIRMADA'].includes(snap.nombre));
   letra3D.grupo.visible = snap.nombre === 'PLAYING';
 
   switch (snap.nombre) {
