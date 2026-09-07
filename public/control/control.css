@@ -1,0 +1,82 @@
+:root {
+  --rosa: #ff3ea5;
+  --violeta: #7b2ff7;
+  --cian: #21e6c1;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body {
+  min-height: 100%;
+  background: linear-gradient(160deg, #150b2e, #0a0a12);
+  color: #fff;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+.dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: #b00020; transition: background 0.3s;
+}
+.dot.on { background: var(--cian); }
+
+main { padding: 16px; max-width: 480px; margin: 0 auto; }
+
+.vista { display: none; flex-direction: column; gap: 16px; text-align: center; }
+body[data-estado="ESPERANDO"]     .vista[data-estado="ESPERANDO"],
+body[data-estado="SELECCIONANDO"] .vista[data-estado="SELECCIONANDO"],
+body[data-estado="CONFIRMADA"]    .vista[data-estado="CONFIRMADA"],
+body[data-estado="COUNTDOWN"]     .vista[data-estado="COUNTDOWN"],
+body[data-estado="PLAYING"]       .vista[data-estado="PLAYING"],
+body[data-estado="RESULTADO"]     .vista[data-estado="RESULTADO"] { display: flex; }
+
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.3rem; }
+p { opacity: 0.8; }
+
+button {
+  font: inherit;
+  color: #fff;
+  border: 0;
+  border-radius: 14px;
+  padding: 14px 18px;
+  background: rgba(255, 255, 255, 0.1);
+}
+button:active { transform: scale(0.97); }
+.grande {
+  background: linear-gradient(90deg, var(--rosa), var(--violeta));
+  font-size: 1.2rem;
+  font-weight: 700;
+  padding: 18px;
+}
+.link { background: none; opacity: 0.6; text-decoration: underline; }
+
+.scroll-btns { display: flex; gap: 12px; justify-content: center; }
+.scroll-btns button { flex: 1; font-size: 1.5rem; padding: 18px; }
+
+#lista { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+#lista li {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.95rem;
+}
+#lista li.activa {
+  background: linear-gradient(90deg, var(--rosa), var(--violeta));
+  font-weight: 700;
+}
+
+.reactions { display: flex; gap: 12px; justify-content: center; }
+.reactions button { font-size: 2rem; flex: 1; padding: 16px 0; }
+
+#cd { font-size: 6rem; font-weight: 900; }
+#score {
+  font-size: 4rem; font-weight: 900;
+  background: linear-gradient(90deg, var(--rosa), var(--cian));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}

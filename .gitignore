@@ -1,0 +1,11 @@
+node_modules/
+*.log
+.DS_Store
+.env
+
+# Audio descargado (pesado / derechos de autor). Versiona solo los .lrc y canciones.json.
+canciones/**/*.mp3
+canciones/**/*.m4a
+canciones/**/*.wav
+!canciones/demo/
+grabaciones/

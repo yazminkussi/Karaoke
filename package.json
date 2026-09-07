@@ -1,0 +1,17 @@
+{
+  "name": "karaoke-interactivo",
+  "version": "0.1.0",
+  "description": "Karaoke interactivo - camara self-view + audio local + letra sincronizada + control por celular (WebSockets). Proyecto Redes y Tecnologia.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "author": "Iara Churba, Yazmin Kussi, Rocio Prieto Valdez",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1",
+    "qrcode": "^1.5.4"
+  }
+}
