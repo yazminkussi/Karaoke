@@ -1,25 +1,17 @@
 [
   {
+    "id": "corre",
+    "titulo": "Corre",
+    "artista": "Jesse & Joy",
+    "era": "¿Con quién se queda el perro?",
+    "audio": "/canciones/corre/corre.m4a",
+    "lrc": "/canciones/corre/corre.lrc",
+    "duracion": 306,
+    "offsetLetra": 0
+  },
+  {
     "id": "demo",
-    "titulo": "Cancion Demo",
-    "artista": "Karaoke Interactivo",
-    "era": "Debug",
-    "audio": "/canciones/demo/demo.mp3",
-    "lrc": "/canciones/demo/demo.lrc",
-    "duracion": 40
-  },
-  {
-    "id": "demo-lento",
-    "titulo": "Demo (balada)",
-    "artista": "Karaoke Interactivo",
-    "era": "Debug",
-    "audio": "/canciones/demo/demo.mp3",
-    "lrc": "/canciones/demo/demo.lrc",
-    "duracion": 40
-  },
-  {
-    "id": "demo-fiesta",
-    "titulo": "Demo (fiesta)",
+    "titulo": "Canción Demo",
     "artista": "Karaoke Interactivo",
     "era": "Debug",
     "audio": "/canciones/demo/demo.mp3",

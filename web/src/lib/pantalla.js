@@ -31,7 +31,7 @@ const manosCanvas = crearManosCanvas($('#manos'), video);
 
 function frame() {
   escenario.latir(analisis.tick());
-  manosCanvas.dibujar(datosManos);
+  if (!datosManos || !datosManos.manos?.length) manosCanvas.dibujar(null);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -63,7 +63,8 @@ navigator.mediaDevices
       numManos: 2,
       onResultado: ({ manos, hayPersona }) => {
         ultimoResultado = performance.now();
-        gestos({ manos });
+        gestos({ manos }); // esto actualiza datosManos via onManos
+        manosCanvas.dibujar(datosManos); // dibujar en el MISMO frame -> sin desfase
         if (hayPersona) ultimaPersona = performance.now();
       },
     });
@@ -156,6 +157,7 @@ let loopId = null;
 let t0 = 0;
 let fallback = true;
 let finTimer = null;
+let offsetLetra = 0; // ajuste fino: +/- segundos entre la pista y el .lrc
 
 async function arrancarCancion(cancion) {
   const meta =
@@ -166,6 +168,7 @@ async function arrancarCancion(cancion) {
   idxLetra = -1;
   fallback = true;
   t0 = performance.now();
+  offsetLetra = Number(meta?.offsetLetra) || 0;
   clearTimeout(finTimer);
   setLinea('', '');
 
@@ -183,7 +186,12 @@ async function arrancarCancion(cancion) {
     audio.currentTime = 0;
     audio.load();
     audio.play().catch(() => {});
-    audio.addEventListener('playing', () => { fallback = false; clearTimeout(finTimer); }, { once: true });
+    audio.addEventListener('playing', () => {
+      fallback = false;
+      clearTimeout(finTimer);
+      // red de seguridad por si el evento 'ended' no dispara (m4a DASH, etc.)
+      finTimer = setTimeout(() => socket.emit('cancion-fin'), (audio.duration || dur) * 1000 + 4000);
+    }, { once: true });
     audio.addEventListener('ended', () => socket.emit('cancion-fin'), { once: true });
     audio.addEventListener('error', () => { fallback = true; }, { once: true });
   }
@@ -194,13 +202,26 @@ async function arrancarCancion(cancion) {
 }
 
 function tickLetra() {
-  const t = !fallback && !audio.paused ? audio.currentTime : (performance.now() - t0) / 1000;
+  const base = !fallback && !audio.paused ? audio.currentTime : (performance.now() - t0) / 1000;
+  const t = base - offsetLetra;
   const nuevo = indiceActual(letras, t);
   if (nuevo !== idxLetra) {
     idxLetra = nuevo;
     setLinea(letras[nuevo]?.texto ?? '', letras[nuevo + 1]?.texto ?? '');
   }
 }
+
+// Ajuste fino de sincronía en vivo: [ y ] mueven la letra -/+ 0.2s.
+// El valor final va en "offsetLetra" de canciones.json.
+addEventListener('keydown', (e) => {
+  if (estadoActual !== 'PLAYING') return;
+  if (e.key === '[') offsetLetra -= 0.2;
+  else if (e.key === ']') offsetLetra += 0.2;
+  else return;
+  idxLetra = -2; // fuerza refresco
+  $('#vozStatus').textContent = `offset ${offsetLetra.toFixed(1)}s`;
+  console.log('[letra] offsetLetra =', offsetLetra.toFixed(2));
+});
 
 const elActual = $('#lineaActual');
 const elSig = $('#lineaSiguiente');

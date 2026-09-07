@@ -36,6 +36,7 @@ export async function crearReconocimiento({ video, numManos = 2, onResultado }) 
   let ultimoT = -1;
   let corriendo = true;
   let hayPersona = false;
+  let proximaCara = 0;
 
   function loop() {
     if (!corriendo) return;
@@ -50,7 +51,10 @@ export async function crearReconocimiento({ video, numManos = 2, onResultado }) 
         console.warn('[vision] manos:', err.message);
       }
 
-      if (faceDetector) {
+      // la cara (presencia) no necesita ir a 30fps: cada ~350ms alcanza y
+      // deja mas CPU para que las manos no se atrasen.
+      if (faceDetector && ts >= proximaCara) {
+        proximaCara = ts + 350;
         try {
           const f = faceDetector.detectForVideo(video, ts);
           hayPersona = (f?.detections?.length || 0) > 0;
@@ -59,7 +63,6 @@ export async function crearReconocimiento({ video, numManos = 2, onResultado }) 
         }
       }
 
-      // si hay manos, obviamente hay persona
       const manos = normalizarManos(manosRes);
       onResultado({ manos, hayPersona: hayPersona || manos.length > 0 });
     }
