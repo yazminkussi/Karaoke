@@ -5,7 +5,7 @@ import { crearGestos } from './manos.js';
 import { crearVoz } from './voz.js';
 import { crearAnalisis } from './audioAnalisis.js';
 import { crearEscenario } from './escenario.js';
-import { crearManosCanvas } from './manosCanvas.js';
+import { crearCamara } from './camaraCanvas.js';
 import { crearGrabacion } from './grabacion.js';
 import { repartirDuo } from './duo.js';
 import { crearRetos } from './retos.js';
@@ -34,7 +34,7 @@ fetch('/api/canciones')
 // --- Fondo + audio + manos ------------------------------------------
 const escenario = crearEscenario($('#estrella-wrap'));
 const analisis = crearAnalisis(audio);
-const manosCanvas = crearManosCanvas($('#manos'), video);
+const camara = crearCamara($('#camara'), video);
 const grabacion = crearGrabacion();
 let camStream = null;
 
@@ -47,7 +47,7 @@ const retos = crearRetos({
 
 function frame() {
   escenario.latir(analisis.tick());
-  if (!datosManos || !datosManos.manos?.length) manosCanvas.dibujar(null);
+  camara.dibujar(datosManos, estadoActual);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
@@ -92,7 +92,6 @@ navigator.mediaDevices
       onResultado: ({ manos, hayPersona }) => {
         ultimoResultado = performance.now();
         gestos({ manos });
-        manosCanvas.dibujar(datosManos);
         if (hayPersona) ultimaPersona = performance.now();
       },
     });
@@ -121,8 +120,12 @@ crearVoz({
 });
 
 function enviarAccion({ tipo, direccion, indice, valor }) {
+  console.log('[accion] ->', tipo, direccion ?? valor ?? '');
   socket.emit('accion', { evento: tipo, direccion, indice, valor });
 }
+socket.on('accion-rechazada', (d) => console.warn('[accion RECHAZADA]', d));
+socket.on('connect', () => console.log('[socket] conectado a', SOCKET_URL));
+socket.on('connect_error', (e) => console.warn('[socket] error:', e.message));
 
 // --- Estado global ---------------------------------------------
 socket.on('estado', (snap) => {

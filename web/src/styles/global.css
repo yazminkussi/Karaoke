@@ -69,16 +69,25 @@ img { max-width: 100%; }
 .halftone.h3 { bottom: -6vmin; left: 30%; width: 44vmin; height: 34vmin; transform: rotate(20deg); opacity: 0.7; }
 
 /* ---- Camara a pantalla completa ---- */
+/* el <video> es solo la FUENTE para MediaPipe / grabación (invisible) */
 #selfCam {
   position: fixed;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: center center;
-  transform: scaleX(-1); /* espejo */
+  opacity: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+/* la cámara que se VE la dibuja camaraCanvas.js (misma matemática que el esqueleto) */
+#camara {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   z-index: 1;
-  filter: grayscale(0.32) contrast(1.06) saturate(1.05) brightness(1.03);
+  pointer-events: none;
 }
 
 /* velo crema: tiñe el video hacia la paleta poster y hace que el texto se lea */
@@ -114,13 +123,6 @@ img { max-width: 100%; }
 }
 @keyframes girar { to { rotate: 360deg; } }
 #estrella-wrap[data-modo="corazon"] .estrella path:last-child { fill: var(--rosa-hot); }
-
-#manos {
-  position: fixed;
-  inset: 0;
-  z-index: 8;
-  pointer-events: none;
-}
 
 /* tinte de papel MUY sutil segun cantidad de manos (nada de luces) */
 #tinte {
