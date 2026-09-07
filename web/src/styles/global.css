@@ -181,6 +181,28 @@ img { max-width: 100%; }
 }
 #vozStatus { color: var(--rosa-hot); }
 
+/* HUD de gestos: qué está viendo la cámara (feedback en vivo) */
+#gestoHUD {
+  position: fixed;
+  bottom: 8vmin;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  font-family: var(--body);
+  font-weight: 700;
+  text-transform: lowercase;
+  letter-spacing: 0.03em;
+  font-size: clamp(0.8rem, 2vmin, 1.1rem);
+  color: var(--crema);
+  background: var(--tinta);
+  padding: 8px 16px;
+  border-radius: 999px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+#gestoHUD span { color: var(--rosa-hot); }
+
 #feedbackFlash {
   position: fixed;
   top: 10%;

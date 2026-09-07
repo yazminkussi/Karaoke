@@ -53,6 +53,7 @@ function frame() {
 requestAnimationFrame(frame);
 
 // --- MediaPipe + gestos + voz -----------------------------------
+const HUD_ESTADOS = ['ESPERANDO', 'MODO', 'SELECCIONANDO'];
 const gestos = crearGestos({
   getEstado: () => estadoActual,
   onGesto: enviarAccion,
@@ -63,6 +64,15 @@ const gestos = crearGestos({
     );
     if (d?.corazon) flashCorazon();
     if (estadoActual === 'MODO') pintarModo(d);
+
+    // HUD: qué está viendo la cámara
+    const hud = $('#gestoHUD');
+    if (HUD_ESTADOS.includes(estadoActual)) {
+      hud.hidden = false;
+      $('#gestoTxt').textContent = d?.gesto || 'mostrá la mano';
+    } else {
+      hud.hidden = true;
+    }
   },
 });
 

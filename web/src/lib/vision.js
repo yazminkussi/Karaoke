@@ -18,9 +18,9 @@ export async function crearReconocimiento({ video, numManos = 2, onResultado }) 
     baseOptions: { modelAssetPath: MODELO_MANOS },
     runningMode: 'VIDEO',
     numHands: numManos,
-    minHandDetectionConfidence: 0.6,
-    minHandPresenceConfidence: 0.6,
-    minTrackingConfidence: 0.6,
+    minHandDetectionConfidence: 0.45,
+    minHandPresenceConfidence: 0.45,
+    minTrackingConfidence: 0.45,
   });
 
   let faceDetector = null;

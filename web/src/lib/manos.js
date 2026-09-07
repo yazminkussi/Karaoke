@@ -2,16 +2,18 @@
 // Consume los landmarks normalizados (0..1, ya espejados) que emite
 // web/src/lib/vision.js (MediaPipe HandLandmarker).
 //
-//   mano visible en ESPERANDO            -> presencia
-//   mano arriba / abajo en SELECCIONANDO -> scroll
-//   pellizco (pulgar + indice) sostenido -> confirmar
-//   gesto de corazon (dos manos)         -> efecto (no cambia de estado)
+//   mano visible en ESPERANDO             -> presencia
+//   1 mano (solo) / 2 manos (duo) en MODO -> elegir modo (sostener)
+//   mano arriba / abajo en SELECCIONANDO  -> scroll
+//   pellizco (pulgar + indice) sostenido  -> confirmar
+//   gesto de corazon (dos manos)          -> efecto
 
-const UMBRAL_PELLIZCO = 0.45; // dist pulgar-indice / tamano de la mano
-const MS_PRESENCIA = 700;
-const MS_CONFIRMAR = 1100;
-const MS_SCROLL = 550;
-const MS_MODO = 1200; // mantener 1 o 2 manos para elegir solo / duo
+const UMBRAL_PELLIZCO = 0.55; // dist pulgar-indice / tamano de la mano (mas permisivo)
+const MS_PRESENCIA = 500;
+const MS_CONFIRMAR = 900;
+const MS_SCROLL = 480;
+const MS_MODO = 1000;
+const MS_ESTABLE = 220; // la cantidad de manos tiene que mantenerse esto antes de contar
 
 export function crearGestos({ getEstado, onGesto, onManos }) {
   const st = {
@@ -22,12 +24,24 @@ export function crearGestos({ getEstado, onGesto, onManos }) {
     pinchStart: 0,
     pinchProgress: 0,
     confirmEnviado: false,
+    // MODO
+    countPend: -1,
+    countPendDesde: 0,
+    countEstable: 0,
     modoDesde: 0,
-    modoCount: 0,
     modoEnviado: false,
   };
 
-  // Se llama en cada frame de MediaPipe con { manos: [{puntos, lado}] }
+  // cantidad de manos "estable" (ignora parpadeos del tracker)
+  function contarEstable(n, ahora) {
+    if (n !== st.countPend) {
+      st.countPend = n;
+      st.countPendDesde = ahora;
+    }
+    if (ahora - st.countPendDesde >= MS_ESTABLE) st.countEstable = n;
+    return st.countEstable;
+  }
+
   return function procesar({ manos }) {
     const estado = getEstado();
     const ahora = performance.now();
@@ -36,20 +50,25 @@ export function crearGestos({ getEstado, onGesto, onManos }) {
       st.pinchStart = 0;
       st.pinchProgress = 0;
       st.confirmEnviado = false;
+      st.countPend = -1;
+      st.countEstable = 0;
       st.modoDesde = 0;
-      st.modoCount = 0;
       st.modoEnviado = false;
       st.lastEstado = estado;
     }
 
-    // --- MODO: mantener 1 mano (solo) o 2 (duo) para elegir ---
+    const n = contarEstable(manos.length, ahora);
+    const corazon = manos.length >= 2 && esCorazon(manos[0].puntos, manos[1].puntos);
+
+    // --- MODO: sostener 1 mano (solo) o 2 (duo) ---
     if (estado === 'MODO') {
-      const n = manos.length;
-      if (n !== st.modoCount) {
-        st.modoCount = n;
-        st.modoDesde = ahora;
-      }
       const eleccion = n === 1 ? 'solo' : n >= 2 ? 'duo' : null;
+      if (!eleccion) {
+        st.modoDesde = 0;
+      } else if (!st.modoDesde || st.modoUlt !== eleccion) {
+        st.modoDesde = ahora;
+        st.modoUlt = eleccion;
+      }
       const progreso = eleccion ? Math.min(1, (ahora - st.modoDesde) / MS_MODO) : 0;
       if (eleccion && progreso >= 1 && !st.modoEnviado) {
         st.modoEnviado = true;
@@ -61,6 +80,7 @@ export function crearGestos({ getEstado, onGesto, onManos }) {
         corazon: false,
         modoElegido: eleccion,
         modoProgreso: progreso,
+        gesto: eleccion ? `${eleccion} ${Math.round(progreso * 100)}%` : 'mostrá 1 o 2 manos',
       });
       return;
     }
@@ -70,15 +90,15 @@ export function crearGestos({ getEstado, onGesto, onManos }) {
       st.manoDesde = 0;
       st.pinchStart = 0;
       st.pinchProgress = 0;
-      onManos?.({ manos: [], cantidadManos: 0, corazon: false, pinchProgress: 0 });
+      onManos?.({ manos: [], cantidadManos: 0, corazon: false, pinchProgress: 0, gesto: 'sin manos' });
       return;
     }
 
     const kp = mano.puntos;
     const tam = d(kp[0], kp[9]) || 1;
     const pellizco = d(kp[4], kp[8]) / tam < UMBRAL_PELLIZCO;
-    const ny = kp[9].y; // 0 arriba .. 1 abajo
-    const corazon = manos.length >= 2 && esCorazon(manos[0].puntos, manos[1].puntos);
+    const ny = (kp[0].y + kp[9].y) / 2; // centro de la mano, 0 arriba .. 1 abajo
+    let gesto = `${n} mano${n === 1 ? '' : 's'}`;
 
     if (estado === 'ESPERANDO') {
       if (!st.manoDesde) st.manoDesde = ahora;
@@ -86,8 +106,9 @@ export function crearGestos({ getEstado, onGesto, onManos }) {
         st.presenciaEnviada = true;
         onGesto({ tipo: 'presencia' });
       }
+      gesto = 'listo!';
     } else if (estado === 'SELECCIONANDO') {
-      const zona = ny < 0.35 ? 'arriba' : ny > 0.65 ? 'abajo' : null;
+      const zona = ny < 0.38 ? 'arriba' : ny > 0.62 ? 'abajo' : null;
       if (zona && ahora - st.ultimoScroll > MS_SCROLL) {
         st.ultimoScroll = ahora;
         onGesto({ tipo: 'scroll', direccion: zona });
@@ -99,27 +120,23 @@ export function crearGestos({ getEstado, onGesto, onManos }) {
           st.confirmEnviado = true;
           onGesto({ tipo: 'confirmar' });
         }
+        gesto = `confirmando ${Math.round(st.pinchProgress * 100)}%`;
       } else {
         st.pinchStart = 0;
         st.pinchProgress = 0;
         st.confirmEnviado = false;
+        gesto = zona ? (zona === 'arriba' ? '↑ subiendo' : '↓ bajando') : 'movete arriba/abajo o pellizcá';
       }
     }
 
     onManos?.({
       manos: manos.map((m) => ({ puntos: m.puntos })),
-      cantidadManos: manos.length,
+      cantidadManos: n,
       corazon,
       pellizco,
       pinchProgress: st.pinchProgress,
-      zonaScroll:
-        estado === 'SELECCIONANDO'
-          ? ny < 0.35
-            ? 'arriba'
-            : ny > 0.65
-              ? 'abajo'
-              : null
-          : null,
+      zonaScroll: estado === 'SELECCIONANDO' ? (ny < 0.38 ? 'arriba' : ny > 0.62 ? 'abajo' : null) : null,
+      gesto,
     });
   };
 }
@@ -128,10 +145,6 @@ function d(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// Gesto de corazon: puntas de pulgares juntas y puntas de indices juntas
-// (adaptado del pc.html del equipo, en coordenadas normalizadas 0..1).
 function esCorazon(m1, m2) {
-  const dPulgares = d(m1[4], m2[4]);
-  const dIndices = d(m1[8], m2[8]);
-  return dPulgares < 0.09 && dIndices < 0.09;
+  return d(m1[4], m2[4]) < 0.1 && d(m1[8], m2[8]) < 0.1;
 }

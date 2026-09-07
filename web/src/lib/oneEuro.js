@@ -37,7 +37,8 @@ class Escalar {
 }
 
 // Filtra un array de puntos {x,y,z}. Un filtro por coordenada por punto.
-export function crearFiltroMano({ minCutoff = 1.4, beta = 0.03, dCutoff = 1.0 } = {}) {
+// Valores pensados para RESPONDER rapido (poco lag) y solo sacar el temblor fino.
+export function crearFiltroMano({ minCutoff = 2.6, beta = 0.15, dCutoff = 1.2 } = {}) {
   const fx = [];
   const fy = [];
   const fz = [];
