@@ -10,6 +10,27 @@
     "offsetLetra": 0
   },
   {
+    "id": "colgando",
+    "titulo": "Colgando en tus manos",
+    "artista": "Carlos Baute & Marta Sánchez",
+    "era": "Dúo",
+    "voces": "duo",
+    "audio": "/canciones/colgando/colgando.m4a",
+    "lrc": "/canciones/colgando/colgando.lrc",
+    "duracion": 235,
+    "offsetLetra": 0
+  },
+  {
+    "id": "me-rehuso",
+    "titulo": "Me rehúso",
+    "artista": "Danny Ocean",
+    "era": "Me rehúso",
+    "audio": "/canciones/me-rehuso/me-rehuso.m4a",
+    "lrc": "/canciones/me-rehuso/me-rehuso.lrc",
+    "duracion": 203,
+    "offsetLetra": 0
+  },
+  {
     "id": "demo",
     "titulo": "Canción Demo",
     "artista": "Karaoke Interactivo",
