@@ -40,10 +40,20 @@ permiso de **cámara** y **micrófono**.
 
 ## Máquina de estados
 
-`ESPERANDO → SELECCIONANDO → CONFIRMADA → COUNTDOWN → PLAYING → RESULTADO → ESPERANDO`
+`ESPERANDO → MODO → SELECCIONANDO → CONFIRMADA → COUNTDOWN → PLAYING → RESULTADO → ESPERANDO`
 
 La autoridad es el servidor ([server/stateMachine.js](server/stateMachine.js)). La
 pantalla solo manda **acciones** y renderiza el `estado`.
+
+- **MODO**: elegís **solo** (1 mano sostenida / decir "solo") o **dúo**
+  (2 manos / decir "dúo"). En dúo la letra se reparte automáticamente en
+  **VOZ 1 / VOZ 2 / LOS DOS**, cada una de un color — karaoke competencia.
+- **PLAYING**: además de la letra hay **retos** ([web/src/lib/retos.js](web/src/lib/retos.js)):
+  cada tanto aparece un cartel ("manos arriba", "corazón", "puño", "paz"…);
+  si lo cumplís sumás puntos. El puntaje final = base por completar la canción +
+  bonus de retos.
+- **RESULTADO**: la pantalla sube el video grabado al server y el **QR** lleva a
+  `http://IP:3000/video/<sesión>` (página con el reproductor + botón de descarga).
 
 ## Control por cámara
 
