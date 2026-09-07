@@ -52,8 +52,10 @@ pantalla solo manda **acciones** y renderiza el `estado`.
   cada tanto aparece un cartel ("manos arriba", "corazón", "puño", "paz"…);
   si lo cumplís sumás puntos. El puntaje final = base por completar la canción +
   bonus de retos.
-- **RESULTADO**: la pantalla sube el video grabado al server y el **QR** lleva a
-  `http://IP:3000/video/<sesión>` (página con el reproductor + botón de descarga).
+- **RESULTADO**: la pantalla graba un **video compuesto** (cámara + la letra que
+  se canta) con **audio de la canción + la voz mezclados**, lo sube al server,
+  que lo pasa a **.mp4** con ffmpeg. El **QR** lleva a `http://IP:3000/video/<sesión>`
+  (reproductor + descarga). El primer toque en la pantalla desbloquea el audio.
 
 ## Control por cámara
 
