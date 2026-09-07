@@ -1,6 +1,8 @@
 import { conectar } from './socket.js';
 import { parsearLRC, indiceActual } from './lrc.js';
-import { iniciarManos } from './manos.js';
+import { crearReconocimientoManos } from './vision.js';
+import { crearGestos } from './manos.js';
+import { crearVoz } from './voz.js';
 import { crearEscena } from '../three/escena.js';
 import { crearEscenarioPop } from '../three/escenarioPop.js';
 import { crearCatalogo3D } from '../three/catalogo3D.js';
@@ -12,39 +14,19 @@ const $ = (s) => document.querySelector(s);
 const body = document.body;
 const video = $('#selfCam');
 const audio = $('#pista');
+const filtro = $('#filtro');
 const socket = conectar('pantalla');
 
 let estadoActual = 'ESPERANDO';
 let estadoPrevio = null;
-let catalogo = []; // version del snapshot (id/titulo/artista)
-let catalogoFull = []; // con rutas de audio/lrc/duracion (desde /api/canciones)
+let catalogo = [];
+let catalogoFull = [];
 let datosManos = null;
 
 fetch('/api/canciones')
   .then((r) => r.json())
-  .then((data) => (catalogoFull = data))
+  .then((d) => (catalogoFull = d))
   .catch(() => {});
-
-// --- Camara + control por manos -------------------------------------
-navigator.mediaDevices
-  .getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
-  .then((stream) => {
-    video.srcObject = stream;
-    iniciarManos({
-      video,
-      getEstado: () => estadoActual,
-      onGesto: ({ tipo, direccion }) =>
-        socket.emit('accion', { evento: tipo, direccion }),
-      onManos: (d) => (datosManos = d),
-    }).catch((e) => console.warn('manos:', e.message));
-  })
-  .catch((err) => {
-    console.warn('camara no disponible:', err.message);
-    const a = document.createElement('div');
-    a.className = 'aviso';
-    a.textContent = 'Camara no disponible (' + err.name + ')';
-    body.appendChild(a);
-  });
 
 // --- Escena 3D -----------------------------------------------------
 const escena = crearEscena($('#gl'));
@@ -53,7 +35,6 @@ const cat3D = crearCatalogo3D(escena);
 const letra3D = crearLetra3D(escena);
 const audioViz = crearAudioReactivo(escena.scene, audio);
 const manosNeon = crearManosNeon(escena);
-
 cat3D.grupo.visible = false;
 letra3D.grupo.visible = false;
 
@@ -66,16 +47,55 @@ escena.onFrame((dt, t) => {
   manosNeon.update(datosManos, dt, t);
 });
 
-// --- QR de onboarding --------------------------------------------
-fetch('/api/qr-control')
-  .then((r) => r.json())
-  .then(({ dataUrl }) => {
-    if (dataUrl) {
-      $('#qrOnboard').src = dataUrl;
-      $('#qrResultado').src = dataUrl;
-    }
+// --- Camara + reconocimiento (MediaPipe manos) + voz --------------
+const gestos = crearGestos({
+  getEstado: () => estadoActual,
+  onGesto: enviarAccion,
+  onManos: (d) => {
+    datosManos = d;
+    aplicarFiltro(d);
+  },
+});
+
+navigator.mediaDevices
+  .getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
+  .then((stream) => {
+    video.srcObject = stream;
+    return crearReconocimientoManos({ video, numManos: 2, onResultado: gestos });
   })
-  .catch(() => {});
+  .catch((err) => {
+    console.warn('camara / MediaPipe:', err.message);
+    aviso('Cámara no disponible (' + err.name + ')');
+  });
+
+crearVoz({
+  getEstado: () => estadoActual,
+  getCatalogo: () => catalogoFull.length ? catalogoFull : catalogo,
+  onGesto: enviarAccion,
+  onEstadoVoz: (txt) => ($('#vozStatus').textContent = txt),
+});
+
+function enviarAccion({ tipo, direccion, indice }) {
+  socket.emit('accion', { evento: tipo, direccion, indice });
+}
+
+// --- Filtro de color por cantidad de manos / corazon -------------
+let ultimoCorazon = 0;
+function aplicarFiltro(d) {
+  if (!d) return;
+  if (d.corazon) {
+    filtro.style.background = 'rgba(255, 20, 147, 0.42)';
+    if (performance.now() - ultimoCorazon > 2500) {
+      ultimoCorazon = performance.now();
+      flash('💖');
+      escenario.pulso?.();
+    }
+    return;
+  }
+  if (d.cantidadManos >= 2) filtro.style.background = 'rgba(40, 200, 90, 0.30)';
+  else if (d.cantidadManos === 1) filtro.style.background = 'rgba(0, 150, 255, 0.28)';
+  else filtro.style.background = 'rgba(0, 0, 0, 0)';
+}
 
 // --- Estado global ---------------------------------------------
 socket.on('estado', (snap) => {
@@ -86,7 +106,6 @@ socket.on('estado', (snap) => {
   if (snap.canciones?.length && snap.canciones.length !== catalogo.length) {
     catalogo = snap.canciones;
     cat3D.setCanciones(catalogo);
-    renderCatalogoDOM();
   }
 
   cat3D.grupo.visible = ['SELECCIONANDO', 'CONFIRMADA'].includes(snap.nombre);
@@ -95,7 +114,6 @@ socket.on('estado', (snap) => {
   switch (snap.nombre) {
     case 'SELECCIONANDO':
       cat3D.setIndice(snap.indiceCancion);
-      marcarActivaDOM(snap.indiceCancion);
       break;
     case 'CONFIRMADA':
       $('#confirmadaTitulo').textContent = snap.cancion
@@ -117,24 +135,6 @@ socket.on('estado', (snap) => {
   }
   estadoPrevio = snap.nombre;
 });
-
-socket.on('feedback', ({ texto }) => flash(texto));
-
-// --- Catalogo DOM (respaldo accesible) -------------------------
-function renderCatalogoDOM() {
-  const ul = $('#catalogo');
-  ul.innerHTML = '';
-  catalogo.forEach((c) => {
-    const li = document.createElement('li');
-    li.innerHTML = `${c.titulo} <span style="opacity:.6">· ${c.artista}</span>`;
-    ul.appendChild(li);
-  });
-}
-function marcarActivaDOM(i) {
-  const ul = $('#catalogo');
-  [...ul.children].forEach((li, k) => li.classList.toggle('activa', k === i));
-  ul.children[i]?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-}
 
 // --- PLAYING: audio + letra ----------------------------------
 let letras = [];
@@ -213,12 +213,25 @@ function mostrarResultado(snap) {
     el.textContent = v;
     if (v >= meta) clearInterval(el._t);
   }, 25);
+
+  fetch('/api/qr-resultado?sesion=' + encodeURIComponent(snap.sesionId || ''))
+    .then((r) => r.json())
+    .then(({ dataUrl }) => { if (dataUrl) $('#qrResultado').src = dataUrl; })
+    .catch(() => {});
 }
 
+// --- helpers UI -----------------------------------------
 function flash(texto) {
   const el = $('#feedbackFlash');
   el.textContent = texto;
   el.classList.add('show');
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), 1200);
+}
+
+function aviso(txt) {
+  const a = document.createElement('div');
+  a.className = 'aviso';
+  a.textContent = txt;
+  body.appendChild(a);
 }

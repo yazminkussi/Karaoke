@@ -1,14 +1,17 @@
 // El cerebro del karaoke interactivo.
-// - Coordina la maquina de estados y la reparte a todos por Socket.IO
+// - Coordina la maquina de estados y la reparte por Socket.IO
 // - Expone el catalogo de canciones y los archivos de audio/letra
-// - En produccion tambien sirve el frontend Astro ya compilado (web/dist)
+// - En produccion (npm start) tambien sirve el frontend Astro compilado
 //
-// Arquitectura (ver investigacion):
-//   [Control celular] --WebSocket--> [este servidor] --WebSocket--> [Pantalla principal]
-//   [Sensor/camara]  --WebSocket-->      ^
+// Arquitectura:
+//   [Pantalla principal]  --acciones (manos + voz)-->  [este servidor]
+//   [Sensor ultrasonico Arduino] --WebSocket/Serial-->      (maquina de estados)
 //
-// En desarrollo el frontend corre aparte con `astro dev` (puerto 4321) y se
-// conecta a este socket por su URL absoluta; por eso habilitamos CORS.
+// Ya NO hay control por celular: todo se maneja desde la camara de la pantalla
+// principal (MediaPipe Hands + reconocimiento de voz).
+//
+// En dev el frontend corre aparte con `astro dev` (:4321) y se conecta a este
+// socket por su URL absoluta; por eso habilitamos CORS.
 
 import express from 'express';
 import cors from 'cors';
@@ -28,7 +31,6 @@ const PORT = process.env.PORT || 3000;
 const WEB_PORT = process.env.WEB_PORT || 4321; // astro dev
 const DIST = join(__dirname, '..', 'web', 'dist');
 // Servir el frontend compilado solo cuando se pide explicitamente (npm start).
-// En `npm run dev` el frontend lo sirve `astro dev` en el 4321.
 const SERVIR_BUILD = process.env.SERVE_BUILD === '1' && existsSync(DIST);
 
 const app = express();
@@ -36,13 +38,10 @@ app.use(cors());
 const httpServer = createServer(app);
 const io = new Server(httpServer, { cors: { origin: '*' } });
 
-// --- Catalogo de canciones -------------------------------------------------
+// --- Catalogo de canciones ---------------------------------------------
 async function cargarCanciones() {
   try {
-    const raw = await readFile(
-      join(__dirname, 'canciones', 'canciones.json'),
-      'utf8'
-    );
+    const raw = await readFile(join(__dirname, 'canciones', 'canciones.json'), 'utf8');
     return JSON.parse(raw);
   } catch (err) {
     console.warn('[canciones] no pude leer canciones.json:', err.message);
@@ -52,19 +51,21 @@ async function cargarCanciones() {
 
 let canciones = await cargarCanciones();
 
-// --- Maquina de estados ---------------------------------------------------
+// --- Maquina de estados -----------------------------------------------
 const maquina = crearMaquina({
   canciones,
   onCambio: (snap) => io.emit('estado', snap),
 });
 
-// --- API --------------------------------------------------------------
+// --- API -----------------------------------------------------------
 app.get('/api/canciones', (_req, res) => res.json(canciones));
 app.use('/canciones', express.static(join(__dirname, 'canciones')));
 
-// QR que apunta al control remoto (onboarding + pantalla de RESULTADO)
-app.get('/api/qr-control', async (_req, res) => {
-  const url = urlControl();
+// QR de la pantalla de RESULTADO ("escanea para llevarte tu video").
+// TODO: apuntar a la URL real de descarga del video con el id de sesion.
+app.get('/api/qr-resultado', async (req, res) => {
+  const sesion = req.query.sesion || '';
+  const url = `http://${ipLocal()}:${SERVIR_BUILD ? PORT : WEB_PORT}/video/${sesion}`;
   try {
     const dataUrl = await QRCode.toDataURL(url, { margin: 1, width: 320 });
     res.json({ url, dataUrl });
@@ -73,21 +74,20 @@ app.get('/api/qr-control', async (_req, res) => {
   }
 });
 
-// --- Frontend compilado (solo con npm start) --------------------------
+// --- Frontend compilado (solo con npm start) ------------------------
 if (SERVIR_BUILD) {
   app.use(express.static(DIST));
-  app.get('/control', (_req, res) => res.sendFile(join(DIST, 'control', 'index.html')));
   app.get('/', (_req, res) => res.sendFile(join(DIST, 'index.html')));
 }
 
-// --- Socket.IO --------------------------------------------------------
+// --- Socket.IO ----------------------------------------------------
 io.on('connection', (socket) => {
   const rol = socket.handshake.query.rol || 'desconocido';
   console.log(`[socket] conexion (${rol}) ${socket.id}`);
 
   socket.emit('estado', maquina.snapshot());
 
-  // Control del celular, gestos y sensor mandan acciones aca.
+  // La pantalla (gestos + voz) y el sensor mandan acciones aca.
   socket.on('accion', ({ evento, ...payload } = {}) => {
     if (!evento) return;
     console.log(`[accion] ${rol} -> ${evento}`, payload);
@@ -95,15 +95,10 @@ io.on('connection', (socket) => {
     if (!ok) socket.emit('accion-rechazada', { evento, estado: maquina.nombre });
   });
 
-  // Reacciones del celular -> flash en la pantalla principal.
-  socket.on('feedback-control', ({ texto } = {}) => {
-    if (texto) io.emit('feedback', { texto });
-  });
-
-  // La pantalla principal avisa cuando la cancion termino.
+  // La pantalla avisa cuando la cancion termino.
   socket.on('cancion-fin', () => maquina.enviar('fin'));
 
-  // Puntaje calculado por la pantalla (ml5/performance) al terminar.
+  // Puntaje calculado por la pantalla (performance) al terminar.
   socket.on('puntaje', ({ valor } = {}) => maquina.enviar('fin', { puntaje: valor }));
 
   socket.on('disconnect', () =>
@@ -111,27 +106,17 @@ io.on('connection', (socket) => {
   );
 });
 
-// --- Arranque -------------------------------------------------------
+// --- Arranque ---------------------------------------------------
 httpServer.listen(PORT, () => {
+  const front = SERVIR_BUILD ? PORT : WEB_PORT;
   console.log('\n  Karaoke interactivo - el cerebro');
   console.log('  ---------------------------------');
   console.log(`  Socket.IO / API   : http://localhost:${PORT}`);
-  if (SERVIR_BUILD) {
-    console.log(`  Frontend (build)  : http://localhost:${PORT}/`);
-  } else {
-    console.log(`  Frontend (dev)    : http://localhost:${WEB_PORT}/  (astro dev)`);
-  }
-  console.log(`  Control (celular)  : ${urlControl()}`);
+  console.log(`  Pantalla principal : http://localhost:${front}/  ${SERVIR_BUILD ? '(build)' : '(astro dev)'}`);
   console.log(`  Estado inicial     : ${ESTADOS.ESPERANDO}`);
   console.log(`  Canciones cargadas : ${canciones.length}`);
-  console.log('  (celular y compu deben estar en la misma red Wi-Fi)\n');
+  console.log('  Control: manos (MediaPipe) + voz, desde la camara de la pantalla\n');
 });
-
-function urlControl() {
-  const ip = ipLocal();
-  const puerto = SERVIR_BUILD ? PORT : WEB_PORT;
-  return `http://${ip}:${puerto}/control`;
-}
 
 function ipLocal() {
   const ifaces = os.networkInterfaces();

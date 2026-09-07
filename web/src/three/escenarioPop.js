@@ -94,7 +94,14 @@ export function crearEscenarioPop(scene) {
   );
   grupo.add(particulas);
 
+  let extra = 0; // golpe puntual (gesto de corazon)
+  function pulso() {
+    extra = 1;
+  }
+
   function update(dt, t, energia = 0) {
+    extra = Math.max(0, extra - dt * 1.5);
+    energia = Math.min(1, energia + extra);
     grupo.rotation.y = Math.sin(t * 0.05) * 0.15;
     reflectores.forEach((l, i) => {
       l.position.x = Math.sin(t * 0.7 + i * 2.1) * 9;
@@ -111,5 +118,5 @@ export function crearEscenarioPop(scene) {
     piso.material.opacity = 0.35 + energia * 0.4;
   }
 
-  return { grupo, update };
+  return { grupo, update, pulso };
 }

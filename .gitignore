@@ -8,6 +8,10 @@ node_modules/
 web/dist/
 web/.astro/
 
+# MediaPipe: wasm + modelos (los deja el postinstall de web/, no van al repo)
+web/public/mediapipe/
+web/public/models/
+
 # Audio descargado (pesado / derechos de autor). Se versiona solo .lrc y canciones.json.
 server/canciones/**/*.mp3
 server/canciones/**/*.m4a

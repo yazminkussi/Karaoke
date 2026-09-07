@@ -5,23 +5,24 @@ import Base from '../layouts/Base.astro';
 <Base title="Karaoke · Pantalla principal">
   <canvas id="gl"></canvas>
   <video id="selfCam" autoplay playsinline muted></video>
+  <div id="filtro"></div>
   <audio id="pista" preload="auto"></audio>
 
   <div id="feedbackFlash"></div>
 
+  <!-- indicador de escucha por voz -->
+  <div id="vozBox">🎙️ <span id="vozStatus">iniciando…</span></div>
+
   <!-- ESPERANDO -->
   <section class="ui" data-estado="ESPERANDO">
     <h1>Sentite un cantante profesional</h1>
-    <p class="lead">Levantá la mano para vivir tu era popstar</p>
-    <img id="qrOnboard" class="qr" alt="QR para abrir el control en tu celular" />
-    <p class="hint">o escaneá para usar tu celular como control</p>
+    <p class="lead">Levantá la mano o decí <b>"cantar"</b> para vivir tu era popstar</p>
   </section>
 
   <!-- SELECCIONANDO -->
   <section class="ui" data-estado="SELECCIONANDO">
     <h2>Elegí tu canción</h2>
-    <ul id="catalogo"></ul>
-    <p class="hint">Mano arriba / abajo para elegir · pellizcá y mantené para confirmar</p>
+    <p class="hint">Mano arriba / abajo o decí el nombre · pellizcá o decí "confirmar"</p>
   </section>
 
   <!-- CONFIRMADA -->
@@ -46,8 +47,6 @@ import Base from '../layouts/Base.astro';
     <p class="hint">Escaneá para llevarte tu video</p>
   </section>
 
-  <!-- ml5.js (handPose / MediaPipe Hands) para el control por gestos -->
-  <script is:inline src="https://unpkg.com/ml5@1.2.1/dist/ml5.min.js"></script>
   <script>
     import '../lib/pantalla.js';
   </script>
