@@ -13,11 +13,12 @@
     "dev:server": "npm -w server run dev",
     "dev:web": "npm -w web run dev",
     "build": "npm -w web run build",
-    "start": "npm -w web run build && npm -w server run start"
+    "start": "npm -w web run build && cross-env SERVE_BUILD=1 npm -w server run start"
   },
   "author": "Iara Churba, Yazmin Kussi, Rocio Prieto Valdez",
   "license": "MIT",
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3"
   }
 }

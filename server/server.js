@@ -27,6 +27,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
 const WEB_PORT = process.env.WEB_PORT || 4321; // astro dev
 const DIST = join(__dirname, '..', 'web', 'dist');
+// Servir el frontend compilado solo cuando se pide explicitamente (npm start).
+// En `npm run dev` el frontend lo sirve `astro dev` en el 4321.
+const SERVIR_BUILD = process.env.SERVE_BUILD === '1' && existsSync(DIST);
 
 const app = express();
 app.use(cors());
@@ -70,8 +73,8 @@ app.get('/api/qr-control', async (_req, res) => {
   }
 });
 
-// --- Frontend compilado (solo en produccion) --------------------------
-if (existsSync(DIST)) {
+// --- Frontend compilado (solo con npm start) --------------------------
+if (SERVIR_BUILD) {
   app.use(express.static(DIST));
   app.get('/control', (_req, res) => res.sendFile(join(DIST, 'control', 'index.html')));
   app.get('/', (_req, res) => res.sendFile(join(DIST, 'index.html')));
@@ -113,7 +116,7 @@ httpServer.listen(PORT, () => {
   console.log('\n  Karaoke interactivo - el cerebro');
   console.log('  ---------------------------------');
   console.log(`  Socket.IO / API   : http://localhost:${PORT}`);
-  if (existsSync(DIST)) {
+  if (SERVIR_BUILD) {
     console.log(`  Frontend (build)  : http://localhost:${PORT}/`);
   } else {
     console.log(`  Frontend (dev)    : http://localhost:${WEB_PORT}/  (astro dev)`);
@@ -126,7 +129,7 @@ httpServer.listen(PORT, () => {
 
 function urlControl() {
   const ip = ipLocal();
-  const puerto = existsSync(DIST) ? PORT : WEB_PORT;
+  const puerto = SERVIR_BUILD ? PORT : WEB_PORT;
   return `http://${ip}:${puerto}/control`;
 }
 
