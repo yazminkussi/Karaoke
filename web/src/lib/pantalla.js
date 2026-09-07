@@ -6,6 +6,7 @@ import { crearVoz } from './voz.js';
 import { crearAnalisis } from './audioAnalisis.js';
 import { crearEscenario } from './escenario.js';
 import { crearManosCanvas } from './manosCanvas.js';
+import { crearPersonaCanvas } from './personaCanvas.js';
 import { crearGrabacion } from './grabacion.js';
 
 const $ = (s) => document.querySelector(s);
@@ -29,11 +30,16 @@ fetch('/api/canciones')
 const escenario = crearEscenario($('#estrella-wrap'));
 const analisis = crearAnalisis(audio);
 const manosCanvas = crearManosCanvas($('#manos'), video);
+const persona = crearPersonaCanvas($('#persona'), video);
 const grabacion = crearGrabacion();
 let camStream = null;
 
 function frame() {
   escenario.latir(analisis.tick());
+  if (persona.lista) {
+    persona.dibujar();
+    if (!body.classList.contains('recorte')) body.classList.add('recorte');
+  }
   if (!datosManos || !datosManos.manos?.length) manosCanvas.dibujar(null);
   requestAnimationFrame(frame);
 }
@@ -65,6 +71,7 @@ navigator.mediaDevices
     return crearReconocimiento({
       video,
       numManos: 2,
+      onMascara: persona.setMascara,
       onResultado: ({ manos, hayPersona }) => {
         ultimoResultado = performance.now();
         gestos({ manos }); // esto actualiza datosManos via onManos

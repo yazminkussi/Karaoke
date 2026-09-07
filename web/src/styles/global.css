@@ -78,6 +78,21 @@ img { max-width: 100%; }
   z-index: 1;
   filter: grayscale(0.32) contrast(1.06) saturate(1.05) brightness(1.03);
 }
+/* con recorte de persona, el video crudo se usa solo como fuente (invisible) */
+body.recorte #selfCam { opacity: 0; }
+
+/* la persona recortada va POR ENCIMA de la UI (no queda tapada por nada) */
+#persona {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 7;
+  pointer-events: none;
+  transform: scaleX(-1); /* mismo espejo que el video */
+  display: none;
+}
+body.recorte #persona { display: block; }
 
 /* velo crema: tiñe el video hacia la paleta poster y hace que el texto se lea */
 #velo {
@@ -117,7 +132,7 @@ img { max-width: 100%; }
 #manos {
   position: fixed;
   inset: 0;
-  z-index: 4;
+  z-index: 8;
   pointer-events: none;
 }
 
@@ -125,7 +140,7 @@ img { max-width: 100%; }
 #tinte {
   position: fixed;
   inset: 0;
-  z-index: 5;
+  z-index: 4;
   pointer-events: none;
   mix-blend-mode: multiply;
   background: transparent;
@@ -139,7 +154,7 @@ img { max-width: 100%; }
 #grano {
   position: fixed;
   inset: 0;
-  z-index: 6;
+  z-index: 5;
   pointer-events: none;
   opacity: 0.3;
   mix-blend-mode: multiply;
@@ -198,7 +213,7 @@ img { max-width: 100%; }
 .ui {
   position: fixed;
   inset: 0;
-  z-index: 7;
+  z-index: 6;
   display: none;
   flex-direction: column;
   align-items: center;
@@ -451,7 +466,7 @@ body[data-estado="RESULTADO"]     .ui[data-estado="RESULTADO"] {
   position: fixed;
   bottom: 12px;
   left: 12px;
-  z-index: 10;
+  z-index: 11;
   background: var(--tinta);
   color: var(--crema);
   padding: 7px 12px;

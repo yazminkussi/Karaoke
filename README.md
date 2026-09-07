@@ -47,11 +47,12 @@ pantalla solo manda **acciones** y renderiza el `estado`.
 
 ## Control por cámara
 
-### Manos + presencia — MediaPipe Tasks Vision
+### Manos + presencia + recorte — MediaPipe Tasks Vision
 
-[web/src/lib/vision.js](web/src/lib/vision.js) corre dos modelos sobre el video:
-`HandLandmarker` (gestos) y `FaceDetector` (¿hay una persona?). Si **no ve a
-nadie por 10 segundos** en un estado activo, vuelve solo a ESPERANDO.
+[web/src/lib/vision.js](web/src/lib/vision.js) corre 3 modelos sobre el video:
+- `HandLandmarker` (gestos) — con **filtro One Euro** ([oneEuro.js](web/src/lib/oneEuro.js)) para que el esqueleto no tiemble.
+- `FaceDetector` (¿hay una persona?) — si **no ve a nadie por 10 s** en un estado activo, vuelve solo a ESPERANDO.
+- `ImageSegmenter` (selfie) — recorta a la persona y la dibuja **por encima de la UI** ([personaCanvas.js](web/src/lib/personaCanvas.js)), así la letra / la estrella nunca la tapan. Si el modelo no está, cae a la cámara a pantalla completa.
 
 [web/src/lib/manos.js](web/src/lib/manos.js) traduce los gestos:
 
