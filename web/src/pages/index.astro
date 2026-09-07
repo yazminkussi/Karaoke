@@ -53,6 +53,7 @@ import Base from '../layouts/Base.astro';
       <p id="lineaSiguiente"></p>
     </div>
   </section>
+  <div id="progreso" hidden><span></span></div>
 
   <!-- RESULTADO -->
   <section class="ui" data-estado="RESULTADO">
@@ -61,6 +62,7 @@ import Base from '../layouts/Base.astro';
       <div id="score">0</div>
       <div id="qrMarco"><img id="qrResultado" alt="QR para descargar tu video" /></div>
     </div>
+    <a id="bajarVideo" hidden download="mi-karaoke.webm">↓ descargar mi video</a>
     <p class="hint">Escaneá para llevarte tu video</p>
   </section>
 

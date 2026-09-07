@@ -6,6 +6,7 @@ import { crearVoz } from './voz.js';
 import { crearAnalisis } from './audioAnalisis.js';
 import { crearEscenario } from './escenario.js';
 import { crearManosCanvas } from './manosCanvas.js';
+import { crearGrabacion } from './grabacion.js';
 
 const $ = (s) => document.querySelector(s);
 const body = document.body;
@@ -28,6 +29,8 @@ fetch('/api/canciones')
 const escenario = crearEscenario($('#estrella-wrap'));
 const analisis = crearAnalisis(audio);
 const manosCanvas = crearManosCanvas($('#manos'), video);
+const grabacion = crearGrabacion();
+let camStream = null;
 
 function frame() {
   escenario.latir(analisis.tick());
@@ -55,8 +58,9 @@ let ultimoResultado = 0; // ultimo frame procesado por MediaPipe
 const ESTADOS_TIMEOUT = ['SELECCIONANDO', 'CONFIRMADA', 'COUNTDOWN', 'PLAYING'];
 
 navigator.mediaDevices
-  .getUserMedia({ video: { width: 1280, height: 720 }, audio: false })
+  .getUserMedia({ video: { width: 1280, height: 720 }, audio: true })
   .then((stream) => {
+    camStream = stream;
     video.srcObject = stream;
     return crearReconocimiento({
       video,
@@ -158,6 +162,9 @@ let t0 = 0;
 let fallback = true;
 let finTimer = null;
 let offsetLetra = 0; // ajuste fino: +/- segundos entre la pista y el .lrc
+let duracionCancion = 40;
+const barra = $('#progreso');
+const barraFill = barra.querySelector('span');
 
 async function arrancarCancion(cancion) {
   const meta =
@@ -169,8 +176,14 @@ async function arrancarCancion(cancion) {
   fallback = true;
   t0 = performance.now();
   offsetLetra = Number(meta?.offsetLetra) || 0;
+  duracionCancion = Number(meta?.duracion) || 40;
   clearTimeout(finTimer);
-  setLinea('', '');
+  mostrarLinea(-1, true);
+  barra.hidden = false;
+  barraFill.style.width = '0%';
+
+  // graba en paralelo (camara + microfono)
+  grabacion.iniciar(camStream);
 
   if (meta?.lrc) {
     try {
@@ -180,7 +193,7 @@ async function arrancarCancion(cancion) {
     }
   }
 
-  const dur = meta?.duracion || 40;
+  const dur = duracionCancion;
   if (meta?.audio) {
     audio.src = meta.audio;
     audio.currentTime = 0;
@@ -204,15 +217,20 @@ async function arrancarCancion(cancion) {
 function tickLetra() {
   const base = !fallback && !audio.paused ? audio.currentTime : (performance.now() - t0) / 1000;
   const t = base - offsetLetra;
+
+  // barra de progreso
+  barraFill.style.width =
+    Math.max(0, Math.min(100, (base / duracionCancion) * 100)).toFixed(1) + '%';
+
   const nuevo = indiceActual(letras, t);
   if (nuevo !== idxLetra) {
     idxLetra = nuevo;
-    setLinea(letras[nuevo]?.texto ?? '', letras[nuevo + 1]?.texto ?? '');
+    mostrarLinea(nuevo);
   }
+  pintarPalabras(t);
 }
 
 // Ajuste fino de sincronía en vivo: [ y ] mueven la letra -/+ 0.2s.
-// El valor final va en "offsetLetra" de canciones.json.
 addEventListener('keydown', (e) => {
   if (estadoActual !== 'PLAYING') return;
   if (e.key === '[') offsetLetra -= 0.2;
@@ -225,18 +243,62 @@ addEventListener('keydown', (e) => {
 
 const elActual = $('#lineaActual');
 const elSig = $('#lineaSiguiente');
-function setLinea(a, b) {
-  elActual.textContent = a;
-  elSig.textContent = b;
-  elActual.hidden = !a;
-  // reinicia la animacion del subrayado magenta
-  elActual.classList.remove('entrando');
-  if (a) {
-    void elActual.offsetWidth;
-    elActual.classList.add('entrando');
+let palabras = []; // [{ span, t0 }] de la linea actual
+let lineaRender = -99; // qué línea real está en pantalla (evita re-render en los silencios)
+
+// Enseña la línea `idx` como palabras, con un t0 estimado por palabra
+// (interpolado dentro de la línea, proporcional a la cantidad de letras).
+function mostrarLinea(idx, forzar = false) {
+  // durante un silencio del .lrc, mostramos por adelantado la próxima línea
+  // (sin resaltar nada todavía) para que la pantalla no quede vacía.
+  let i = idx;
+  while (letras[i] && !letras[i].texto) i++;
+  if (!forzar && i === lineaRender && idx >= 0) return; // ya está en pantalla
+  lineaRender = i;
+
+  elActual.innerHTML = '';
+  palabras = [];
+  const cur = letras[i];
+
+  const sig = [letras[i + 1], letras[i + 2]].find((l) => l?.texto)?.texto || '';
+  elSig.textContent = sig;
+
+  if (!cur || !cur.texto) {
+    elActual.hidden = true;
+    return;
   }
+  elActual.hidden = false;
+
+  const trozos = cur.texto.split(/\s+/).filter(Boolean);
+  const fin = letras[i + 1] ? letras[i + 1].tiempo : cur.tiempo + 4;
+  const dur = Math.max(0.6, fin - cur.tiempo);
+  const totalCh = trozos.reduce((s, w) => s + w.length, 0) || 1;
+  let acc = 0;
+  for (const w of trozos) {
+    const span = document.createElement('span');
+    span.textContent = w + ' ';
+    elActual.appendChild(span);
+    palabras.push({ span, t0: cur.tiempo + (acc / totalCh) * dur });
+    acc += w.length;
+  }
+
+  elActual.classList.remove('entrando');
+  void elActual.offsetWidth;
+  elActual.classList.add('entrando');
   ajustarLetra();
 }
+
+function pintarPalabras(t) {
+  if (!palabras.length) return;
+  let actual = -1;
+  for (let i = 0; i < palabras.length; i++) if (palabras[i].t0 <= t) actual = i;
+  for (let i = 0; i < palabras.length; i++) {
+    const c = palabras[i].span.classList;
+    c.toggle('dicha', i < actual);
+    c.toggle('actual', i === actual);
+  }
+}
+
 function ajustarLetra() {
   if (!elActual.textContent) return;
   const maxH = innerHeight * 0.4;
@@ -255,7 +317,8 @@ function detenerCancion() {
   clearInterval(loopId);
   loopId = null;
   clearTimeout(finTimer);
-  setLinea('', '');
+  mostrarLinea(-1, true);
+  barra.hidden = true;
   try {
     audio.pause();
     audio.removeAttribute('src');
@@ -280,6 +343,17 @@ function mostrarResultado(snap) {
     .then((r) => r.json())
     .then(({ dataUrl }) => { if (dataUrl) $('#qrResultado').src = dataUrl; })
     .catch(() => {});
+
+  // cerrar la grabacion y ofrecer el video
+  const bajar = $('#bajarVideo');
+  bajar.hidden = true;
+  grabacion.detener().then((blob) => {
+    if (!blob || !blob.size) return;
+    bajar.href = URL.createObjectURL(blob);
+    bajar.download = `karaoke-${(snap.cancion?.id || 'video')}-${snap.sesionId || ''}.webm`;
+    bajar.hidden = false;
+    // TODO: subir el blob al server para servirlo por el QR
+  });
 }
 
 // --- helpers UI ------------------------------------------

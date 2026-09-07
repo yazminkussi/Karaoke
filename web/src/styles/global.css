@@ -353,26 +353,32 @@ body[data-estado="RESULTADO"]     .ui[data-estado="RESULTADO"] {
   font-family: var(--fat);
   text-transform: uppercase;
   font-size: clamp(1.8rem, var(--fitActual, 7vmin), 6rem);
-  line-height: 0.92;
+  line-height: 1.05;
   letter-spacing: -0.02em;
   color: var(--tinta);
-  position: relative;
-  padding: 0.08em 0.3em;
 }
-#lineaActual::after {
+#lineaActual.entrando { animation: aparecer 0.3s ease both; }
+@keyframes aparecer { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* palabra por palabra: ya dicha = rosa apagado, la que toca = marcada */
+#lineaActual span {
+  position: relative;
+  transition: color 0.1s;
+  color: color-mix(in srgb, var(--tinta) 42%, transparent);
+}
+#lineaActual span.dicha { color: var(--rosa-hot); }
+#lineaActual span.actual { color: var(--tinta); }
+#lineaActual span.actual::after {
   content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0.18em;
-  height: 0.32em;
+  left: 0.04em;
+  right: 0.28em;
+  bottom: 0.1em;
+  height: 0.3em;
   background: var(--rosa);
   z-index: -1;
-  rotate: -1deg;
-  transform-origin: left;
+  rotate: -1.5deg;
 }
-#lineaActual.entrando::after { animation: marcar 0.35s ease both; }
-@keyframes marcar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 #lineaSiguiente {
   font-family: var(--fat);
   text-transform: uppercase;
@@ -406,6 +412,40 @@ body[data-estado="RESULTADO"]     .ui[data-estado="RESULTADO"] {
   box-shadow: 8px 8px 0 var(--rosa);
 }
 #qrMarco img { width: clamp(120px, 26vmin, 240px); display: block; }
+
+/* barra de progreso de la cancion */
+#progreso {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 8px;
+  background: color-mix(in srgb, var(--tinta) 14%, transparent);
+  z-index: 8;
+}
+#progreso span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--rosa-hot);
+  transition: width 0.2s linear;
+}
+
+/* boton local para bajarse el video (fallback del QR) */
+#bajarVideo {
+  pointer-events: auto;
+  font-family: var(--body);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.9rem;
+  color: var(--crema);
+  background: var(--tinta);
+  padding: 0.7rem 1.4rem;
+  border-radius: 999px;
+  text-decoration: none;
+  margin-top: 1vmin;
+}
 
 .aviso {
   position: fixed;
